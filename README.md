@@ -104,7 +104,7 @@ In Dragonframe, set the input trigger to shoot, and set the relay to close durin
 
 Depending on who you are, building the machine and the control box is either the most or the least intimidating part of this. Since the hardware isn't too dissimilar to other CNC machines like 3D printers, I'm not going to go into too much detail. If you want to follow my design, consult the pictures.
 
-The overall rigidity of your machine and how susceptible the end affector is to vibrations will determine how fast you'll be able to drive it while keeping light vibration down to an acceptable level.
+The overall rigidity of your machine and how susceptible the end effector is to vibrations will determine how fast you'll be able to drive it while keeping light vibration down to an acceptable level. My machine was less rigid than I would have liked, but it worked. Make sure you mount it solidly to something secure that will take up all the vibration and keep the machine from moving.
 
 The components to the control box are the following:
 
