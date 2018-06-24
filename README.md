@@ -22,3 +22,7 @@ sdfg
 **How this all interfaces with Dragonframe**
 
 sdfg
+
+**Incorporating motion control**
+
+Motion control (or moco) will let you add camera movements and prop movements into your animations. For more info, check out this addon: https://github.com/Defaultio/BlenderMoco/
