@@ -63,16 +63,35 @@ _Start Frame_ specifies the frame to start on.
 
 _End Frame_ specifies the frame to end on.
 
-###### Connecting to Processing
+###### Connecting Blender to Processing
 
-Blender communicates with Processing through Open Sound Control (OSC). Using OSC in Blender requires this Python library: https://github.com/sergeLabo/blenderOSC
+Blender communicates with Processing through Open Sound Control (OSC).
 
-![alt text](Screenshots/ProcessingConsole.png)    
+Using OSC in Blender requires this Python library: https://github.com/sergeLabo/blenderOSC
 
+Using OSC in Processing requires the oscP5 library by Andreas Schlegel. You can find it in Processing by searching for "oscP5" in the library manager, or here: http://www.sojamo.de/libraries/oscP5/
 
-**How this all interfaces with Dragonframe**
+Start by running the Processing sketch and checking the console.
 
-sdfg
+![alt text](Screenshots/ProcessingConsole.png)   
+
+Ensure that the IP adress and the port printed in the Processing console match the _ip_out_ and _port_out_ variables in the header of _PathExportTool.py_.
+
+###### Connecting Processing to Arduino
+
+Set the _PORT_NUM_ variable in the header of the Processing sketch to match the serial port number that the Arduino is connected to. This might take some trial and error, it's usually been 0 for me.
+
+###### Connecting Arduino to Dragonframe
+
+I recommend using a Dragonframe DMC16 or DDMX-512 to easily interface between Arduino and Dragonframe. If this is not an option, you may be able to hack together some other way to trigger Dragonframe, perhaps by hacking the enter key of a number pad. It would be harder to find a way to figure out communication from Dragonframe back to Arduino, so you might loose this functionality. You'd have to run Dragonframe open loop and just have the Arduino wait a set safe exposure time between each frame.
+
+If using a DMC16 or DDMX-512, connect a relay to the _dragonframeActivate_ pin in the Arduino sketch, and connect this relay between SW and GND on the DMC16 or IN and GND on the DDMX-512. Connect the _dragonframeFinished_ pin to one of the two relay connections on either the DMC16 or DDMX-512, and connect the other relay connection to ground. Connect a pullup resistor to the _dragonframeFinished_ pin or use the INPUT_PULLUP pinmode if available.
+
+![alt text](Screenshots/DMC16Connections.png)   
+
+In Dragonframe, set the input trigger to shoot, and set the relay to close during exposure.
+
+![alt text](Screenshots/DragonframeConnections.png)   
 
 **Incorporating motion control**
 
