@@ -11,6 +11,7 @@ This is the Blender, Processing, and Arduino code that enable use of a CNC light
 
 ![alt text](Screenshots/SignalFlow.png)
 
+
 **Using _VertexPathCreate.py_ to adorn light path objects to animated meshes**
 
 Run _VertexPathCreate.py_ and enter edit mode to view the light path creation tool panel.
@@ -29,9 +30,11 @@ _VertexPathCreate.py_ will automatically create a circle called _LightCircle_, w
 
 _VertexPathCreate.py_ will also automatically create a material called _LightPathMaterial_ and assign the material of all created light paths to this material. Set up this material with no surface shader and an emission volume shader with a color of your choice. You can use different materials for each path, but it is important that each uses an emission shader because the color of this shader is used by _PathExportTool.py_ to send color commands to the machine.
 
-**Operation Overview**
+
+**Operation Setup**
 
 When you run _PathExportTool.py_, the light painting execution panel will appear in the tools pane when in object mode.
+
 
 ###### Paremeter setup
 
@@ -63,6 +66,7 @@ _Start Frame_ specifies the frame to start on.
 
 _End Frame_ specifies the frame to end on.
 
+
 ###### Connecting Blender to Processing
 
 Blender communicates with Processing through Open Sound Control (OSC).
@@ -77,9 +81,11 @@ Start by running the _LightPaintingRelay.pde_ Processing sketch and checking the
 
 Ensure that the IP adress and the port printed in the Processing console match the _ip_out_ and _port_out_ variables in the header of _PathExportTool.py_.
 
+
 ###### Connecting Processing to Arduino
 
 Set the _PORT_NUM_ variable in the header of the Processing sketch to match the serial port number that the Arduino is connected to. This might take some trial and error, it's usually been 0 for me.
+
 
 ###### Connecting Arduino to Dragonframe
 
@@ -92,6 +98,16 @@ If using a DMC16 or DDMX-512, connect a relay to the _dragonframeActivate_ pin i
 In Dragonframe, set the input trigger to shoot, and set the relay to close during exposure.
 
 ![alt text](Screenshots/DragonframeConnections.png) 
+
+
+**Operation Tips**
+
+_PathExportTool.py_ automatically creates a "SceneProps" object group. If there are any physical props in your scene, add them to this group. When exporting movement commands, if there is an object in this group that is between the current light position and the start of the next path, the light will avoid the obstical by retracting to a Z position of _Prop Height Limit_, moving to the next position in the XY plane, and then finally moving to the Z position of the start of the next path. Keep in mind that this raycast check only checks for obstacles along a thin line, and does not consider the thickness of the light emitter. Avoiding collisions is also dependent on exactly lining up the physical props on your scene to their respective virtual locations. There's always a risk of collision when using props in your scene; do so at your own risk.
+
+If using a bash light, in DMX settings, set the Power up Time, Lights up Settle Time, and Bash off Settle Time all to 0 to minimize time between frames.
+
+If you're having any touble at all getting this to work, please contact me! There's a lot involved here and I'm sure I've left stuff out. joshjamsheldon@gmail.com.
+
 
 **Incorporating motion control**
 
