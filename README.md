@@ -9,7 +9,7 @@ This is the Blender, Processing, and Arduino code that enable use of a CNC light
 * When finished, the Arduino indicates it is finished by sending a serial command to Processing, which relays it back to Blender through OSC.
 * When _PathExportTool.py_ in Blender receives the finished command, it sends the command sequence for the next exposure. This loop continues until all exposures are complete.
 
-![alt text](Screenshots/ToolPanel.png)
+![alt text](Screenshots/SignalFlow.png)
 
 **Using _VertexPathCreate.py_ to adorn light path objects to animated meshes**
 
@@ -21,7 +21,7 @@ Click the button to enter the path creation state.
 
 ![alt text](Screenshots/VertexPathTool2.png)
 
-Select a series of verticies on the mesh and a path object will be generated, following your sequence of verticies. Press finish or the enter key when you're done.
+Select a series of verticies on the mesh and a path object will be generated, following the sequence of verticies you selected. Press finish or the enter key when you're done.
 
 On the backend, this is automating the usually tedious process of creating empty objects attached to each vertex, creating a path that connects the verticies, and connecting the path to the empty objects using hook modifiers so that the path translates and deforms with the mesh.
 
