@@ -116,7 +116,7 @@ The components to the control box are the following:
 * RGB LED driver. I made a simple transistor circuit to do this, you can find diagrams online. You might also be able to find premade modules to do this.
 * Voltage stepdown unit to step 24v down to 3v for the RGB LED. Also widely available, search for "voltage stepdown module".
 
-Hook everything together, set the pin assignments in the Arduino sketch, and if you're lucky it might work. If not, take it apart and debug one system at a time until you get everything working.
+Hook everything together, set the pin assignments in the Arduino sketch, and if you're lucky it might work. If not, take it apart and debug one system at a time until you get everything working. I believe in you!
 
 
 **Operation Tips and Misc Info**
