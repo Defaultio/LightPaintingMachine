@@ -100,6 +100,25 @@ In Dragonframe, set the input trigger to shoot, and set the relay to close durin
 ![alt text](Screenshots/DragonframeConnections.png) 
 
 
+**Hardware**
+
+Depending on who you are, building the machine and the control box is either the most or the least intimidating part of this. Since the hardware isn't too dissimilar to other CNC machines like 3D printers, I'm not going to go into too much detail. If you want to follow my design, consult the pictures.
+
+The overall rigidity of your machine and how susceptible the end affector is to vibrations will determine how fast you'll be able to drive it while keeping light vibration down to an acceptable level.
+
+The components to the control box are the following:
+
+* Arduino. I used a small form factor Arduino mega equivalent.
+* 3 stepper drivers. I used the DM320T.
+* Power supply to match stepper drivers and stepper current. I used a 24v 4a power supply. Since the Arduino can't run directly on 24v, I opted just to let it be powered over USB.
+* SD card and SD card reader. I used a micro SD card reader. These Arduino modules are widely available on Amazon/eBay.
+* Relay module. Also widely available.
+* RGB LED driver. I made a simple transistor circuit to do this, you can find diagrams online. You might also be able to find premade modules to do this.
+* Voltage stepdown unit to step 24v down to 3v for the RGB LED. Also widely available, search for "voltage stepdown module".
+
+Hook everything together, set the pin assignments in the Arduino sketch, and if you're lucky it might work. If not, take it apart and debug one system at a time until you get everything working.
+
+
 **Operation Tips and Misc Info**
 
 When _PathExportTool.py_ is exporting movement commands, it optimizes the order of paths by choosing the next path endpoint that is the closest to the path endpoint of the most recently completed path. This ensures each exposure is drawn as quickly as possible.
