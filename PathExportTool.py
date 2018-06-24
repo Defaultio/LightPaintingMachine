@@ -48,34 +48,18 @@
 #   - Execute cancel
 
 #   - Physical positions:
-#       - Moco machine origin position offset relative to Blender origin
 #       - Light painting machine origin position offset relative to Blender origin
-#       - Consider perhaps defining these through physical 3D models in blender of the rigs
-#           - Would help set up the scene space, especially when using sets
-#           - If the machines were animated in Blender, could be used to visually determine physical obsticals that would obstruct the execution of a frame.
 
 #   - Do not attempt to draw light path points if they are outside of bounds of the machine
 #       - Input for light painting bounds
 
-#   - Way to disable a light path, some kind of animatable enabled property.
-#       - Could be a 0 - 1 float that defines path opacity
-#       - Explore custom properties for this.
+#   - Set color to 0,0,0 to disable path.
 
 #   - Path draw order optimization for time, pick closest next endpoint. Can do this once at initial collection.
 
 #   - Specifiy start and end frame
 #       - Values default to 0 - last frame
 
-#   - Export Path Traversal Threshold parameter so the machine can keep a speed based on a Move Speed (mm/s) parameter
-#      - Consider writing Arduino code in a totally parameterized way and setting all parameters in blender:
-#           - Move Speed (mm/s)
-#           - Steps Per mm (step/mm)
-#               - Consider including both numerator and denomenator inputs if resultant is a lengthy float
-#               - Seperate parameters for X Y Z
-
-#   - Seperate function to export camera movement Raw Move file for Dragonframe, with specified start/end frames.
-#       -> See if possible to use built in text editor methods: bpy.ops.text.new() and bpy.ops.text.save_as()
-#
 
 # Notes:
 #   Ensure DMC16 is set to close relay -during- exposure.

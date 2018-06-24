@@ -6,21 +6,28 @@
 #include <AccelStepper.h>
 #include <MultiStepper.h>
 
+
+// User settings
+double ledBrightnessTrim[3] =  {0.4, 1.0, 1.0}; // Brightness tuning for LED
+int homeFrameFrequency = 20; // Rehome all axes after this many frames
+int bashLightFadeOutTime = 4500; // wait this long after initially triggering dragonframe to start the first exposure
+int timeBetweenFrameExposures = 800; // wait this long after triggering dragonframe for the next exposure before continuing painting
+int mocoWaitTime = 500; // wait this amount of time to allow moco to move if this time is not already soaked up by bash light fade and communication
+
+
+
 // Command and parsing values
 File commandSequenceLog;
-
 boolean receivingData; 
-
 int parsePosition;
 String stringVal;
 String command;
 int val;
 int commandValue[3];
-
 char serialReceiveCommand[4];
 char serialReceiveValues[25];
 
-// Settings
+// Settings (these are set by the settings is Blender)
 int stepsPerSecond[3] = {1000, 1000, 1000};
 long workspaceSize[3] = {0, 0, 0};
 int axisDirections[3] = {1, 1, -1};
@@ -46,7 +53,6 @@ int stepperStepPins[3] = {17, 15, 19};
 int stepperDirPins[3] = {29, 27, 31};
 int colorPins[3] = {5, 3, 7};
 int lowerLimits[3] = {36, 34, 32};
-//int upperLimits[3] = {A3, A4, A5};
 int dragonframeActivate = 46;
 int dragonframeFinished = 47;
 int SD_CSPin = 53;
@@ -57,33 +63,6 @@ AccelStepper stepperY(AccelStepper::DRIVER, stepperStepPins[1], stepperDirPins[1
 AccelStepper stepperZ(AccelStepper::DRIVER, stepperStepPins[2], stepperDirPins[2]);
 MultiStepper steppers;
 int homeSpeed = 4;
-
-// Settings
-// Brightness tuning for LED
-double ledBrightnessTrim[3] =  {0.4, 1.0, 1.0}; // green tinted glass: {0.38, 0.75, 1.0}
-int homeFrameFrequency = 20;
-
-int bashLightFadeOutTime = 4500; //2800; --> moco doesn't happen during bash fade.
-int timeBetweenFrameExposures = 800; // wait this long after triggering dragonframe for the next exposure before continuing painting
-int mocoWaitTime = 500;
-
-/*
-
-Box inputs/outputs
-
-FRONT:
-  - Power switch
-  - USB
-  - Lights??
-
-REAR:
-  - Power socket
-  - 4 stepper connectors
-  - 1 Aviator connector for lower limits
-  - 1 Aviator connector for upper limits (if there are upper limits)
-  - 1 Aviator connector for DMC-16 I/O
-
- */
 
 
 void setup() {
@@ -592,88 +571,6 @@ void homeSteppers()
   Serial.print(workspaceSize[1]);
   Serial.print(", ");
   Serial.println(workspaceSize[2]);
-
-
-  
-  /*
-  int homed[3] = {0,0,0};
-
-  stepperX.setSpeed(homeSpeed);
-  stepperY.setSpeed(homeSpeed);
-  stepperZ.setSpeed(homeSpeed);
-  
-  while (homed[0] < 2 || homed[1] < 2 || homed[2] < 2)
-  {
-
-    for (int i = 0; i < 3; i ++)
-    {
-      lowerLimitState[i] = digitalRead(lowerLimits[i]);
-      
-      if (homed[i] == 0 && lowerLimitState[i] == HIGH)
-      {
-        if (i == 0)
-          stepperX.setSpeed(-homeSpeed / 10);
-        else if (i == 1)
-          stepperY.setSpeed(-homeSpeed / 10);
-        else if (i == 2)
-          stepperZ.setSpeed(-homeSpeed / 10);
-          
-        homed[i] = 1;
-        delay(50);
-      }
-      else if (homed[i] == 1 && lowerLimitState[i] == LOW)
-      {
-        if (i == 0)
-          stepperY.setSpeed(0);
-        else if (i == 1)
-          stepperY.setSpeed(0);
-        else if (i == 2)
-          stepperZ.setSpeed(0);
-        homed[i] = 2;
-      }
-    }
-
-    if (homed[0] < 2)
-      stepperX.runSpeed();
-    if (homed[1] < 2)
-      stepperY.runSpeed();
-    if (homed[2] < 2)
-      stepperZ.runSpeed();
-  }*/
-
-  
-  /*int homed[3] = {0,0,0};
-  long desiredPos[3] = {0,0,0};
-  
-
-  for (int i = 2; i >= 0; i--)
-  {
-    while (homed[i] < 2)
-    {
-      lowerLimitState[i] = digitalRead(lowerLimits[i]);
-      if (homed[i] == 0)
-      {
-        if (lowerLimitState[i] == HIGH)
-          homed[i] = 1;
-        else
-          desiredPos[i] += homeSpeed;
-      }
-      else if (homed[i] == 1)
-      {
-        if (lowerLimitState[i] == LOW)
-          homed[i] = 2;
-        else
-          desiredPos[i] += -homeSpeed / 4;
-      }
-      setPosition(desiredPos[0], desiredPos[1], desiredPos[2]);
-      delayMicroseconds(5);
-    }
-
-    if (i == 2)
-      desiredPos[i] = -workspaceSize[i];
-  }
-  */
-
 
   stepperX.setCurrentPosition(0);
   stepperY.setCurrentPosition(0);
