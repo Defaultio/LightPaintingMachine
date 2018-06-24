@@ -31,7 +31,7 @@ _VertexPathCreate.py_ will also automatically create a material called _LightPat
 
 **Running your light painting machine with _PathExportTool.py_, _LightPaintingRelay.pde_, and _LightPaintingArduino.ino_**
 
-sdfg
+![alt text](Screenshots/PathExportTool)
 
 **How this all interfaces with Dragonframe**
 
