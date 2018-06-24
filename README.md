@@ -29,7 +29,7 @@ _VertexPathCreate.py_ will automatically create a circle called _LightCircle_, w
 
 _VertexPathCreate.py_ will also automatically create a material called _LightPathMaterial_ and assign the material of all created light paths to this material. Set up this material with no surface shader and an emission volume shader with a color of your choice. You can use different materials for each path, but it is important that each uses an emission shader because the color of this shader is used by _PathExportTool.py_ to send color commands to the machine.
 
-**Using _PathExportTool.py_ to export commands**
+**Running your light painting machine with _PathExportTool.py_, _LightPaintingRelay.pde_, and _LightPaintingArduino.ino_**
 
 sdfg
 
@@ -39,4 +39,4 @@ sdfg
 
 **Incorporating motion control**
 
-Motion control (or moco) will let you add camera movements and prop movements into your animations. For more info, check out this Blender addon: https://github.com/Defaultio/BlenderMoco/
+Motion control (or moco) will let you add camera movements and prop movements into your animations. For more info on how to create moco movements in Blender and export those movement to Dragonframe, check out this Blender addon: https://github.com/Defaultio/BlenderMoco/
