@@ -29,7 +29,7 @@ _VertexPathCreate.py_ will automatically create a circle called _LightCircle_, w
 
 _VertexPathCreate.py_ will also automatically create a material called _LightPathMaterial_ and assign the material of all created light paths to this material. Set up this material with no surface shader and an emission volume shader with a color of your choice. You can use different materials for each path, but it is important that each uses an emission shader because the color of this shader is used by _PathExportTool.py_ to send color commands to the machine.
 
-**Running your light painting machine with _PathExportTool.py_, _LightPaintingRelay.pde_, and _LightPaintingArduino.ino_**
+**Operation Overview**
 
 When you run _PathExportTool.py_, the light painting execution panel will appear in the tools pane when in object mode.
 
@@ -71,7 +71,7 @@ Using OSC in Blender requires this Python library: https://github.com/sergeLabo/
 
 Using OSC in Processing requires the oscP5 library by Andreas Schlegel. You can find it in Processing by searching for "oscP5" in the library manager, or here: http://www.sojamo.de/libraries/oscP5/
 
-Start by running the Processing sketch and checking the console.
+Start by running the _LightPaintingRelay.pde_ Processing sketch and checking the console.
 
 ![alt text](Screenshots/ProcessingConsole.png)   
 
@@ -91,7 +91,7 @@ If using a DMC16 or DDMX-512, connect a relay to the _dragonframeActivate_ pin i
 
 In Dragonframe, set the input trigger to shoot, and set the relay to close during exposure.
 
-![alt text](Screenshots/DragonframeConnections.png)   
+![alt text](Screenshots/DragonframeConnections.png) 
 
 **Incorporating motion control**
 
