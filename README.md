@@ -100,7 +100,13 @@ In Dragonframe, set the input trigger to shoot, and set the relay to close durin
 ![alt text](Screenshots/DragonframeConnections.png) 
 
 
-**Operation Tips**
+**Operation Tips and Misc Info**
+
+When _PathExportTool.py_ is exporting movement commands, it optimizes the order of paths by choosing the next path endpoint that is the closest to the path endpoint of the most recently completed path. This ensures each exposure is drawn as quickly as possible.
+
+Each light path object must have a material assigned with an emission shader node. The color of this shader is sent to the machine and used to draw the path. If the color is black, the path will be ignored unless the _Follow Black Paths_ setting is checked. By ignoring black paths, the machine saves time in cases where you might be animating path colors to fade in or out.
+
+Paths that are outside the bounds of the machine will be ignored, obviously.
 
 _PathExportTool.py_ automatically creates a "SceneProps" object group. If there are any physical props in your scene, replicate them in Blender and add them to this group. When exporting movement commands, if there is an object in this group that is between the current light position and the start of the next path, the light will avoid the obstical by retracting to a Z position of _Prop Height Limit_, moving to the next position in the XY plane, and then finally move to the Z position of the start of the next path. Keep in mind that this raycast check only checks for obstacles along a thin line, and does not consider the thickness of the light emitter. Avoiding collisions is also dependent on exactly lining up the physical props on your scene to their respective virtual locations. There's always a risk of collision when using props in your scene; do so at your own risk.
 
