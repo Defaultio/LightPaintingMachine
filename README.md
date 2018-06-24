@@ -13,7 +13,17 @@ This is the Blender, Processing, and Arduino code that enable use of a CNC light
 
 **Using _VertexPathCreate.py_ to adorn light path objects to animated meshes**
 
-dsfg
+Run _VertexPathCreate.py_ and enter edit mode to view the light path creation tool panel.
+
+![alt text](Screenshots/VertexPathTool1.png)
+
+Click the button to enter the path creation state.
+
+![alt text](Screenshots/VertexPathTool2.png)
+
+Select a series of verticies on the mesh and a path object will be generated, following your sequence of verticies. Press finish or the enter key when you're done.
+
+On the backend, this is automating the usually tedious process of creating empty objects attached to each vertex, creating a path that connects the verticies, and connecting the path to the empty objects using hook modifiers so that the path translates and deforms with the mesh.
 
 **Using _PathExportTool.py_ to export commands**
 
