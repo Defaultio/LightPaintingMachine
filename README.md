@@ -25,4 +25,4 @@ sdfg
 
 **Incorporating motion control**
 
-Motion control (or moco) will let you add camera movements and prop movements into your animations. For more info, check out this addon: https://github.com/Defaultio/BlenderMoco/
+Motion control (or moco) will let you add camera movements and prop movements into your animations. For more info, check out this Blender addon: https://github.com/Defaultio/BlenderMoco/
