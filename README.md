@@ -33,37 +33,42 @@ _VertexPathCreate.py_ will also automatically create a material called _LightPat
 
 When you run _PathExportTool.py_, the light painting execution panel will appear in the tools pane when in object mode.
 
-![alt text](Screenshots/ProcessingConsole.png)    
-
 ###### Paremeter setup
 
 Before setting any paremeters, ensure that the unit of length in your Blender scene is set to your preference (use metric).
 
 ![alt text](Screenshots/PathExportTool.png)      
 
-__Path Traversal Increment__ is the step increment used when converting light paths into a sequence of position commands. Each path will be traversed from 0 to 1 in steps of this paremeter. Generally the default value should be fine, for especially long paths a smaller value might be better.
+_Path Traversal Increment_ is the step increment used when converting light paths into a sequence of position commands. Each path will be traversed from 0 to 1 in steps of this paremeter. Generally the default value should be fine, for especially long paths a smaller value might be better.
 
-__Path Traversal Threshold__ is the minimum distance from the current point on the path to the last recorded point for a new point to be recorded. As the path is traversed, a new point will be recorded when the distance to the last point is greater than this threshold. This is effectively a value of fidelity.
+_Path Traversal Threshold_ is the minimum distance from the current point on the path to the last recorded point for a new point to be recorded. As the path is traversed, a new point will be recorded when the distance to the last point is greater than this threshold. This is effectively a value of fidelity.
  
-__Follow Black Paths__ will force the machine to follow paths that are black (invisible). These paths are normally ignored, but there are cases when you may want to force the machine to follow a black path to do manual obstacle avoidance where automatic obstacle avoidance does not suffice (more on this later).
+_Follow Black Paths_ will force the machine to follow paths that are black (invisible). These paths are normally ignored, but there are cases when you may want to force the machine to follow a black path to do manual obstacle avoidance where automatic obstacle avoidance does not suffice (more on this later).
 
-An origin marker and bounding box that indicate the workspace of the machine will be created. Use the __Painter Bounds__ paremeter to match the size of the bounding box to the size of the physical machine, and use the __Painter Position__ paremeter to specify from where in the blender workspace the machine should operate.
+An origin marker and bounding box that indicate the workspace of the machine will be created. Use the _Painter Bounds_ paremeter to match the size of the bounding box to the size of the physical machine, and use the _Painter Position_ paremeter to specify from where in the blender workspace the machine should operate.
 
-__Light Painting Speed__ is how fast the machine will move. Generally this is a tradeoff between shoot time and machine vibration. Fast movement will often cause oscillation in the light, causing uneven, beady paths. Slower movement produces smoother paths.
+_Light Painting Speed_ is how fast the machine will move. Generally this is a tradeoff between shoot time and machine vibration. Fast movement will often cause oscillation in the light, causing uneven, beady paths. Slower movement produces smoother paths.
 
-__Invert Axes__ allows inversion of the X Y and Z axes. For my machine, the Z stage is operating upside down, so the Z axis is inverted.
+_Invert Axes_ allows inversion of the X Y and Z axes. For my machine, the Z stage is operating upside down, so the Z axis is inverted.
 
-__Prop Height Limit__ represents the Y position of the top of the tallest props in your scene. If you are not operating with the Z axis inverted, this would be the height of the bottom of your lowest props. This value is used in obstacle avoidance. If there is a prop in the way between the light position and the start of the next path, the light will retract to this height, move in the XY plane, and then drop down to the final position.
+_Prop Height Limit_ represents the Y position of the top of the tallest props in your scene. If you are not operating with the Z axis inverted, this would be the height of the bottom of your lowest props. This value is used in obstacle avoidance. If there is a prop in the way between the light position and the start of the next path, the light will retract to this height, move in the XY plane, and then drop down to the final position.
 
-__Exposures Per Frame__ specifies how many exposures you want to divide each frame of animation into. This should be matched with the same number of exposures in Dragonframe.
+_Exposures Per Frame_ specifies how many exposures you want to divide each frame of animation into. This should be matched with the same number of exposures in Dragonframe.
 
-__Exposure Time__ specifies the time of each exposure. This should be matched with the shutter speed in Dragonframe.
+_Exposure Time_ specifies the time of each exposure. This should be matched with the shutter speed in Dragonframe.
 
-__Next Exposure Yield Threshold__ is a time value threshold. If the Arduino is not on the last exposure, it is about to move on to the next light path, and the time difference between the frame exposure time and the amount of time elapsed so far is less than this threshold, the Arduino will hold and wait to execute this path on the next exposure. In a scene with only short paths that can be drawn quickly, this value can be low. If there are long paths that take longer to draw, it is safer to keep this value higher. If the value is too low, a light path can get cut off by the end of the exposure and not be fully captured.
+_Next Exposure Yield Threshold_ is a time value threshold. If the Arduino is not on the last exposure, it is about to move on to the next light path, and the time difference between the frame exposure time and the amount of time elapsed so far is less than this threshold, the Arduino will hold and wait to execute this path on the next exposure. In a scene with only short paths that can be drawn quickly, this value can be low. If there are long paths that take longer to draw, it is safer to keep this value higher. If the value is too low, a light path can get cut off by the end of the exposure and not be fully captured.
 
-__Start Frame__ specifies the frame to start on.
+_Start Frame_ specifies the frame to start on.
 
-__End Frame__ specifies the frame to end on.
+_End Frame_ specifies the frame to end on.
+
+###### Connecting to Processing
+
+Blender communicates with Processing through Open Sound Control (OSC). Using OSC in Blender requires this Python library: https://github.com/sergeLabo/blenderOSC
+
+![alt text](Screenshots/ProcessingConsole.png)    
+
 
 **How this all interfaces with Dragonframe**
 
