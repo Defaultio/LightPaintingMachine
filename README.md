@@ -119,7 +119,7 @@ The components to the control box are the following:
 Hook everything together, set the pin assignments in the Arduino sketch, and if you're lucky it might work. If not, take it apart and debug one system at a time until you get everything working. I believe in you!
 
 
-**Operation Tips and Misc Info**
+**Usage Tips and Misc Info**
 
 When _PathExportTool.py_ is exporting movement commands, it optimizes the order of paths by choosing the next path endpoint that is the closest to the path endpoint of the most recently completed path. This ensures each exposure is drawn as quickly as possible.
 
