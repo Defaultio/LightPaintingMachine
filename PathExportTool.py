@@ -76,7 +76,7 @@ from mathutils import Vector
 from send_receive import Receive, Send
 
 ip_in = "127.0.0.1"
-ip_out = "YOUR IP HERE" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
+ip_out = "192.168.1.4" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
 port_in = 9000
 port_out = 8000
 buffer_size = 1024
@@ -192,8 +192,7 @@ class ExecutePainting(Operator):
                 
             if (propInTheWay or self.firstMove):
                 print("Something is in the way! Avoiding obstacle.")
-                zHeight = self.propHeightLimit #0
-                zHeight = max(min(zHeight, self.machineBounds.z), 0)
+                zHeight = max(min(self.propHeightLimit, self.machineBounds.z), 0)
                 #if (self.machineAxisInversions[2]):
                 #    zHeight = self.machineBounds.z
                 #else:
@@ -204,6 +203,8 @@ class ExecutePainting(Operator):
                 self.firstMove = False
                 
             if doWriteNextPath:
+                # NextPath signals are checkpoints that arduino uses to know when to break up
+                # light paths across the multiple exposures
                 self.writeNextPath()
                 self.writeColor(self.CurrentColor[0], self.CurrentColor[1], self.CurrentColor[2])
                    
@@ -328,7 +329,13 @@ class ExecutePainting(Operator):
 
 
                 self.writeMovement(pos, False)
-            
+        
+        if self.homeWandAfterFrame:
+            self.writeColor(0, 0, 0)
+            zHeight = max(min(self.propHeightLimit, self.machineBounds.z), 0)
+            self.writePosition(Vector([self.currentMachinePos.x, self.currentMachinePos.y, zHeight]))
+            self.writePosition(Vector([0, 0, zHeight]))
+        
         self.writeFinish()
         bpy.ops.screen.frame_offset(delta = 1)
     
@@ -383,6 +390,7 @@ class ExecutePainting(Operator):
         self.exposureCount = props.num_exposures_per_frame
         self.exposureTime = props.exposure_time
         self.exposureYieldThreshold = props.exposure_yield_threshold
+        self.homeWandAfterFrame = props.home_wand_after_frame
     
         bpy.ops.screen.animation_cancel(restore_frame = False)
         bpy.ops.screen.frame_jump(end = False)
@@ -491,7 +499,9 @@ class View3dPanel(Panel):
     bpy.types.Scene.exposure_time = bpy.props.IntProperty(name="Exposure Time", description = "Duration of each exposure in seconds. Round down if cannot reach exact value. Set to max Dragonframe.", min = 1, max = 60, default = 30)
     
     bpy.types.Scene.exposure_yield_threshold = bpy.props.FloatProperty(name="Next Exposure Yield Threshold", description = "If a path begins within this many seconds of the end the of exposure, yield and resume at the next exposure. Set this to be about the amount of time it takes to draw the longest path.", min = 0, max = 60, default = 0.8, soft_min = 0.5, soft_max = 10, precision = 1)
-        
+       
+    bpy.types.Scene.home_wand_after_frame = bpy.props.BoolProperty(name="Home Wand After Frame", description = "Send the wand to the home position after the final exposure of each frame.", default = False)
+     
     # Add UI elements here
     # draw method executed every time anything changes.
     def draw(self, context): 
@@ -509,7 +519,7 @@ class View3dPanel(Panel):
         row.prop(props, "light_path_traverse_threshold")
         row = layout.row()
         row.prop(props, "follow_black_paths")
-        
+
         # Hardware parameters
         layout.separator()
         layout.label(text="Hardware Parameters", icon = 'SCRIPTWIN')
@@ -544,6 +554,9 @@ class View3dPanel(Panel):
         row.prop(context.scene, "frame_start")
         row = layout.row(align=True)
         row.prop(context.scene, "frame_end")
+        row = layout.row(align=True)
+        row.prop(props, "home_wand_after_frame")
+        
         
         # Execute / cancel
         row = layout.row()
