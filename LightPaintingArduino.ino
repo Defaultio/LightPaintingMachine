@@ -10,6 +10,7 @@
 // User settings
 double ledBrightnessTrim[3] =  {0.4, 1.0, 1.0}; // Brightness tuning for LED
 int homeFrameFrequency = 20; // Rehome all axes after this many frames
+int homeStepsPerSecond = 4000;
 int bashLightFadeOutTime = 4500; // wait this long after initially triggering dragonframe to start the first exposure
 int timeBetweenFrameExposures = 800; // wait this long after triggering dragonframe for the next exposure before continuing painting
 int mocoWaitTime = 500; // wait this amount of time to allow moco to move if this time is not already soaked up by bash light fade and communication
@@ -355,14 +356,13 @@ void colorTest()
 {
   Serial.println("Color test: red");
   setColor(255, 0, 0);
-  delay(200);
+  delay(600);
   Serial.println("Color test: green");
   setColor(0, 255, 0);
-  delay(200);
+  delay(600);
   Serial.println("Color test: blue");
   setColor(0, 0, 255);
-  delay(200);
-  
+  delay(600);
   setColor(0, 0, 0);
 }
 
@@ -580,7 +580,7 @@ void homeSteppers()
   pos[2] = 0;
 
   int restoreStepSpeed[3] = {stepsPerSecond[0], stepsPerSecond[1], stepsPerSecond[2]};
-  setMoveSpeed(10000, 10000, 10000);
+  setMoveSpeed(homeStepsPerSecond, homeStepsPerSecond, homeStepsPerSecond);
 
   bringStepperToLimit(2);
   stepperZ.setCurrentPosition(0);
@@ -644,4 +644,3 @@ void bringStepperToLimit(int i)
     delayMicroseconds(5);
   }
 }
-
