@@ -3,6 +3,14 @@
 # Template from: https://www.youtube.com/watch?v=Ywza-zyAJzE
 #
 
+bl_info = {
+    "name": "Adorn Mesh Vertices With Path Tool",
+    "author": "Josh Sheldon",
+    "category": "Add Curve",
+    "blender": (2, 7, 9)    
+}
+
+
 import bpy
 import bmesh
 from bpy.types import Panel, Operator
@@ -314,7 +322,7 @@ class UndoPathOperator(Operator):
 
 #Class for the panel with input UI
 class View3dPanel(Panel):
-    
+    bl_idname = "PAINTING_PT_path_create"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
     bl_label = 'Light Painting Tools'
