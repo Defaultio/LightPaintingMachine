@@ -75,6 +75,13 @@ from bpy.types import Panel, Operator
 from mathutils import Vector
 from send_receive import Receive, Send
 
+bl_info = {
+    "name": "Light Painting Path Export Tool",
+    "author": "Josh Sheldon",
+    "category": "Import-Export",
+    "blender": (2, 7, 9)    
+}
+
 ip_in = "127.0.0.1"
 ip_out = "192.168.1.4" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
 port_in = 9000
@@ -121,7 +128,6 @@ class ExecutePainting(Operator):
         orderedLightPaths = [lightPaths.pop(0)]
         
         def getPathEndpoint(path, end):
-            
             points = path.data.splines[0].points
             if len(points) > 0:
                 followPathConstraint.target = path
@@ -131,8 +137,8 @@ class ExecutePainting(Operator):
                 followPathConstraint.offset_factor = max(min(end, pathEnd), pathStart)
                 bpy.context.scene.update()
                 pos = self.pathFollower.matrix_world.to_translation()
-                
-                return pos #points[end].co
+                #return pos #points[end].co
+                return Vector([pos.x, pos.y, pos.z, 1])
             else:
                 l = path.location
                 return Vector([l.x, l.y, l.z, 1])
@@ -160,6 +166,9 @@ class ExecutePainting(Operator):
             
         self.lightPaths = orderedLightPaths
         self.lightPathDirections = lightPathDirections
+        
+        print("Ordered light paths: ", self.lightPaths)
+        print("Light path directions: ", self.lightPathDirections)
         
     def writePosition(self, pos):
         x, y, z = int(pos.x * self.machineStepsPerUnit.x), int(pos.y * self.machineStepsPerUnit.y), int(pos.z * self.machineStepsPerUnit.z)
@@ -291,6 +300,9 @@ class ExecutePainting(Operator):
         for path, direction in zip(self.lightPaths, self.lightPathDirections):
             pathStart = path.data.bevel_factor_start
             pathEnd = path.data.bevel_factor_end
+            if (pathEnd < pathStart):
+                pathStart, pathEnd = pathEnd, pathStart
+                
             color = path.material_slots[0].material.node_tree.nodes["Emission"].inputs[0].default_value
             isBlack = color[0] <= 0 and color[1] <= 0 and color[2] <= 0
    
@@ -401,9 +413,6 @@ class ExecutePainting(Operator):
         bpy.context.scene.objects.active.constraints["Follow Path"].use_fixed_location = True
         self.pathFollower = bpy.context.scene.objects.active
         
-        print("Ordered light paths: ", self.lightPaths)
-        print("Light path directions: ", self.lightPathDirections)
-        
         wm = context.window_manager
         self._timer = wm.event_timer_add(1.0, context.window)
         wm.modal_handler_add(self)
@@ -433,7 +442,7 @@ class CancelExecution(Operator):
 
 #Class for the panel with input UI
 class View3dPanel(Panel):
-    
+    bl_idname = "OBJECT_PT_light_paint_export"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
     bl_label = 'Light Painting Execution'
@@ -468,12 +477,7 @@ class View3dPanel(Panel):
             machineOriginEmpty.name = "MachineOrigin"
             
         machineOriginEmpty.scale = machineBounds / 6
-        machineOriginEmpty.location = machineOffset #+ Vector([machineBounds.x if inversions[0] else 0, machineBounds.y if inversions[1] else 0, machineBounds.z if inversions[2] else 0])
-    
-    # Set of SceneProps group for obstacle avoidance
-    if not ('SceneProps' in bpy.data.groups):
-            bpy.data.groups.new(name = 'SceneProps')
-            
+        machineOriginEmpty.location = machineOffset #+ Vector([machineBounds.x if inversions[0] else 0, machineBounds.y if inversions[1] else 0, machineBounds.z if inversions[2] else 0])   
             
     # Custom parameters
     bpy.types.Scene.light_path_traverse_increment = bpy.props.FloatProperty(name="Path Traversal Increment", description = "The amount the path position will be incremented as it traverses along a path from 0 to 1. Use lower values for longer paths.", default = 0.01, min = 0.001, max = 1.0, soft_min = 0.0, soft_max = 0.5, step = 0.001, precision = 3)
@@ -511,6 +515,10 @@ class View3dPanel(Panel):
         scene = context.scene
         props = scene
         
+        # Set of SceneProps group for obstacle avoidance
+        if not ('SceneProps' in bpy.data.groups):
+                bpy.data.groups.new(name = 'SceneProps')
+            
         # Path paremeters
         layout.label(text="Path Interpretation", icon = 'OUTLINER_OB_CURVE')
         row = layout.row()
