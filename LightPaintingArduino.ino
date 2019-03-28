@@ -185,6 +185,10 @@ void receiveData() {
           {
             setAxisDirections(commandValue[0], commandValue[1], commandValue[2]);
           }
+          else if (command == "cal")
+          {
+            setLedCalibration(commandValue[0] / 1000.0, commandValue[1] / 1000.0, commandValue[2] / 1000.0);
+          }
           else if (command == "frm")
           {
              setFrame(commandValue[0]);
@@ -355,14 +359,23 @@ void executePainting()
 void colorTest()
 {
   Serial.println("Color test: red");
-  setColor(255, 0, 0);
-  delay(600);
+  for (int i = 255; i > 0; i--)
+  {
+    setColor(i, 0, 0);
+    delay(4);
+  }
   Serial.println("Color test: green");
-  setColor(0, 255, 0);
-  delay(600);
+  for (int i = 255; i > 0; i--)
+  {
+    setColor(0, i, 0);
+    delay(4);
+  }
   Serial.println("Color test: blue");
-  setColor(0, 0, 255);
-  delay(600);
+  for (int i = 255; i > 0; i--)
+  {
+    setColor(0, 0, i);
+    delay(4);
+  }
   setColor(0, 0, 0);
 }
 
@@ -411,6 +424,13 @@ void setMoveSpeed(int x, int y, int z)
   stepperX.setMaxSpeed(stepsPerSecond[0]);
   stepperY.setMaxSpeed(stepsPerSecond[1]);
   stepperZ.setMaxSpeed(stepsPerSecond[2]);
+}
+
+void setLedCalibration(float r, float g, float b)
+{
+  ledBrightnessTrim[0] = r;
+  ledBrightnessTrim[1] = g;
+  ledBrightnessTrim[2] = b;
 }
 
 void setExposureCount(int count)
