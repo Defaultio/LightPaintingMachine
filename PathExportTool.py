@@ -67,6 +67,7 @@
 #   Ensure all power up, bash light, and settling times in dragonframe lighting settings are 0 seconds
 #   Ensure frame move speed is 1x jog speed for slow axes of movement.
 #   OSC from Processing to Blender will only work the first time this code is run. If the addon is reloaded, you will have to restart Blender for this direction of communication to work.
+#   LED seems best shot around 4200K white balance
 
 import bpy
 import bmesh
@@ -83,7 +84,7 @@ bl_info = {
 }
 
 ip_in = "127.0.0.1"
-ip_out = "192.168.1.4" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
+ip_out = "192.168.1.5" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
 port_in = 9000
 port_out = 8000
 buffer_size = 1024
@@ -105,6 +106,7 @@ class ExecutePainting(Operator):
     pathFollower = None
     
     firstMove = True
+    movingToNextPath = False
     outOfBounds = False
     overrideColor = False
     currentColor = [0, 0, 0]
@@ -116,37 +118,63 @@ class ExecutePainting(Operator):
     machineSpeed = None
     machineBounds = None
     
-    # Collect light paths, in optimized order for movement speed
-    def collectPaths(self):
+    def pointInWorkspace(self, p):
+        result = p.x >= 0 and p.y >= 0 and p.z >= 0 and p.x <= self.machineBounds.x and p.y <= self.machineBounds.y and p.z <= self.machineBounds.z
+        return result
+    
+    def getPathPosition(self, path, alpha):
+        pathStart = path.data.bevel_factor_start
+        pathEnd = path.data.bevel_factor_end
+        if (pathEnd < pathStart):
+            pathStart, pathEnd = pathEnd, pathStart
+            
         followPathConstraint = self.pathFollower.constraints["Follow Path"]
-        
-        self.lightPaths = []
-        self.lightPathDirections = []
+        followPathConstraint.target = path
+        followPathConstraint.offset_factor = max(min(alpha, pathEnd), pathStart)
+        bpy.context.scene.update()
+        pos = self.pathFollower.matrix_world.to_translation()
+        return Vector([pos.x, pos.y, pos.z, 1])
+    
+    # Collect light paths, in optimized order for movement speed
+    def collectPaths(self, context):
+        self.lightPaths = []            # Path objects
+        self.lightPathDirections = []   # 0 or 1 direction of path traversal
         
         lightPaths = list(bpy.data.groups.get('LightPathGroup').objects)
-        lightPathDirections = [0]
-        orderedLightPaths = [lightPaths.pop(0)]
-        
-        def getPathEndpoint(path, end):
-            points = path.data.splines[0].points
-            if len(points) > 0:
-                followPathConstraint.target = path
-                pathStart = path.data.bevel_factor_start
-                pathEnd = path.data.bevel_factor_end
-                
-                followPathConstraint.offset_factor = max(min(end, pathEnd), pathStart)
-                bpy.context.scene.update()
-                pos = self.pathFollower.matrix_world.to_translation()
-                #return pos #points[end].co
-                return Vector([pos.x, pos.y, pos.z, 1])
-            else:
-                l = path.location
-                return Vector([l.x, l.y, l.z, 1])
+        lightPathDirections = [] #[0]
+        orderedLightPaths = [] #[lightPaths.pop(0)]
             
+        # Filter out all light paths not in the workspace
+        for path in reversed(lightPaths):
+            start = self.getPathPosition(path, 0)
+            end = self.getPathPosition(path, 1)
+            if (not self.pointInWorkspace(start) and not self.pointInWorkspace(end)):
+                lightPaths.remove(path)
+                print("Filtered out path ", path)
+            
+            
+        # Determine first light path point by max height
+        firstEndpointPosition = None
+        firstPathIndex = 0
+        firstPathDirection = 0
         
         for n in range(len(lightPaths)):
+            for index, path in enumerate(lightPaths):
+                for direction in [0, 1]:
+                    pos = self.getPathPosition(path, direction)
+                    if (firstEndpointPosition is None or pos.z > firstEndpointPosition.z):
+                        firstEndpointPosition = pos
+                        firstPathIndex = index
+                        firstPathDirection = direction
+                        
+        lightPathDirections = [firstPathDirection]
+        orderedLightPaths = [lightPaths.pop(firstPathIndex)]
+        
+        
+        # Get sorted list of light paths/directions in order of closest path to the last path's end point
+        for n in range(len(lightPaths)):
             lastPath = orderedLightPaths[-1]
-            lastPos = getPathEndpoint(lastPath, 1 - lightPathDirections[-1])
+            lastPos = self.getPathPosition(lastPath, 1 - lightPathDirections[-1])
     
             closestPathIndex = None
             pathDirection = None
@@ -154,9 +182,9 @@ class ExecutePainting(Operator):
             
             for index, path in enumerate(lightPaths):
                 for direction in [0, 1]:
-                    pos = getPathEndpoint(path, direction)
+                    pos = self.getPathPosition(path, direction)
                     distToLast = (pos - lastPos).length
-                    if closestPathIndex == None or distToLast < closestDist:
+                    if (closestPathIndex == None or distToLast < closestDist):
                         closestPathIndex = index
                         pathDirection = direction
                         closestDist = distToLast
@@ -178,7 +206,7 @@ class ExecutePainting(Operator):
         worldPos = pos
         machinePos = pos - self.machineOffset
         
-        if (machinePos.x < 0 or machinePos.y < 0 or machinePos.z < 0 or machinePos.x > self.machineBounds.x or machinePos.y > self.machineBounds.y or machinePos.z > self.machineBounds.z):
+        if (not self.pointInWorkspace(machinePos)):
             if (not self.outOfBounds):
                 print("PATH LEFT MACHINE BOUNDS")
                 self.outOfBounds = True
@@ -187,6 +215,8 @@ class ExecutePainting(Operator):
             return False
         else:
             propInTheWay = False
+            
+            
             props = list(bpy.data.groups.get('SceneProps').objects)
             for index, prop in enumerate(props):
                 origin = prop.matrix_world.inverted() * self.currentWorldPos
@@ -199,7 +229,12 @@ class ExecutePainting(Operator):
                     propInTheWay = True
                     break
                 
-            if (propInTheWay or self.firstMove):
+                
+            if propInTheWay:
+                print("PROP IN THE WAY! ", self.movingToNextPath)
+            
+            # If first move or there is prop in the way and moving to a new path then avoid obstacle
+            if (self.movingToNextPath and propInTheWay or self.firstMove):
                 print("Something is in the way! Avoiding obstacle.")
                 zHeight = max(min(self.propHeightLimit, self.machineBounds.z), 0)
                 #if (self.machineAxisInversions[2]):
@@ -215,7 +250,7 @@ class ExecutePainting(Operator):
                 # NextPath signals are checkpoints that arduino uses to know when to break up
                 # light paths across the multiple exposures
                 self.writeNextPath()
-                self.writeColor(self.CurrentColor[0], self.CurrentColor[1], self.CurrentColor[2])
+                self.writeColor(self.currentColor[0], self.currentColor[1], self.currentColor[2])
                    
             self.writePosition(machinePos)
             self.currentWorldPos = worldPos
@@ -232,7 +267,7 @@ class ExecutePainting(Operator):
         r = int(r)
         g = int(g)
         b = int(b)
-        self.CurrentColor = [r, g, b]
+        self.currentColor = [r, g, b]
         if (not self.overrideColor):
             my_sender.simple_send_to("/blender/x", ['col', r, g, b], (ip_out, port_out))
         
@@ -241,7 +276,7 @@ class ExecutePainting(Operator):
         if (override):
             my_sender.simple_send_to("/blender/x", ['col', 0, 0, 0], (ip_out, port_out))
         else:
-            self.writeColor(self.CurrentColor[0], self.CurrentColor[1] , self.CurrentColor[2])
+            self.writeColor(self.currentColor[0], self.currentColor[1] , self.currentColor[2])
       
     def writeSpeed(self):
         # steps per second
@@ -256,6 +291,10 @@ class ExecutePainting(Operator):
     def writeAxisInversion(self):
         a = self.machineAxisInversions
         my_sender.simple_send_to("/blender/x", ['inv', -1 if a[0] else 1, -1 if a[1] else 1, -1 if a[2] else 1], (ip_out, port_out))
+        
+    def writeLedCalibration(self):
+        calR, calG, calB = int(self.ledCalibration[0] * 1000), int(self.ledCalibration[1] * 1000), int(self.ledCalibration[2] * 1000)
+        my_sender.simple_send_to("/blender/x", ['cal', calR, calG, calB], (ip_out, port_out))
       
     def writeFrameNumber(self, context):
         my_sender.simple_send_to("/blender/x", ['frm', context.scene.frame_current], (ip_out, port_out))
@@ -288,11 +327,12 @@ class ExecutePainting(Operator):
         self.writeWorkspaceSize()
         self.writeAxisInversion()
         self.writeSpeed()
+        self.writeLedCalibration()
         self.writeExposureCount()
         self.writeExposureTime()
         self.writeYieldThreshold()
         
-        self.collectPaths()
+        self.collectPaths(context)
 
         lastPos = None
         followPathConstraint = self.pathFollower.constraints["Follow Path"]
@@ -303,20 +343,30 @@ class ExecutePainting(Operator):
             if (pathEnd < pathStart):
                 pathStart, pathEnd = pathEnd, pathStart
                 
-            color = path.material_slots[0].material.node_tree.nodes["Emission"].inputs[0].default_value
-            isBlack = color[0] <= 0 and color[1] <= 0 and color[2] <= 0
+            color = None 
+            isBlack = True 
+            
+            for node in path.material_slots[0].material.node_tree.nodes:
+                if (node.bl_idname == "ShaderNodeEmission"):
+                    color = node.inputs[0].default_value
+                    isBlack = color[0] <= 0 and color[1] <= 0 and color[2] <= 0
+            
+            if color is None:
+                print("PATH ", path, " HAS NO EMISSION NODE TO DETERMINE COLOR")
    
             if abs(pathStart - pathEnd) > 0.001 and not (isBlack and not followBlackPaths):
                 
                 followPathConstraint.target = path
                 followPathConstraint.offset_factor = max(min(direction, pathEnd), pathStart)
-                bpy.context.scene.update()
+                context.scene.update()
                 pos = self.pathFollower.matrix_world.to_translation()
                 lastPos = pos#.copy()
                 
                 self.writeColor(0,0,0)
+                self.movingToNextPath = True
                 self.writeMovement(pos, False)
-                self.CurrentColor = [color[0] * 255, color[1] * 255, color[2] * 255]
+                self.movingToNextPath = False
+                self.currentColor = [color[0] * 255, color[1] * 255, color[2] * 255]
                 
                 #if color[0] > 0 or color[1] > 0 or color[2] > 0:
                  #   self.writeNextPath()
@@ -399,11 +449,19 @@ class ExecutePainting(Operator):
         self.machineBounds = Vector(props.painting_robot_bounds)
         self.machineAxisInversions = props.painting_robot_axis_inversions
         self.propHeightLimit = props.prop_height_limit
+        self.ledCalibration = props.led_calibration
         self.exposureCount = props.num_exposures_per_frame
         self.exposureTime = props.exposure_time
         self.exposureYieldThreshold = props.exposure_yield_threshold
         self.homeWandAfterFrame = props.home_wand_after_frame
     
+        # enable all layers so that geometry loads for collision avoidance raycasting
+        enabledLayers = []
+        for i in range(len(bpy.context.scene.layers)):
+            if bpy.context.scene.layers[i] == False:
+                enabledLayers.append(i)
+                bpy.context.scene.layers[i] = True
+        
         bpy.ops.screen.animation_cancel(restore_frame = False)
         bpy.ops.screen.frame_jump(end = False)
         bpy.context.scene.update()
@@ -418,9 +476,13 @@ class ExecutePainting(Operator):
         wm.modal_handler_add(self)
         
         self.sendFrameMovement(context)
+        
+        # disable enabled layers
+        for _, i in enumerate(enabledLayers):
+            bpy.context.scene.layers[i] = False
+            
         return {'RUNNING_MODAL'}
-    
-    
+
     def cancel(self, context):
         self.cleanup()
         wm = context.window_manager
@@ -498,6 +560,8 @@ class View3dPanel(Panel):
     
     bpy.types.Scene.prop_height_limit = bpy.props.FloatProperty(name="Prop Height Limit", description = "Height to retract Z axis to during obstacle avoidance.", default = 20.0, soft_min = 0, soft_max = 1000.0, step = 0.1, precision = 1, unit = 'LENGTH')
     
+    bpy.types.Scene.led_calibration = bpy.props.FloatVectorProperty(name="LED Calibration", description = "RGB scaling values to correct LED colors", default = (0.4, 1.0, 1.0), min = 0.0, max = 1.0, step = 0.001, precision = 3, unit = 'NONE')
+    
     bpy.types.Scene.num_exposures_per_frame = bpy.props.IntProperty(name="Exposures Per Frame", description = "Number of exposures per frame. Set to match Dragonframe.", min = 1, max = 20, default = 1)
   
     bpy.types.Scene.exposure_time = bpy.props.IntProperty(name="Exposure Time", description = "Duration of each exposure in seconds. Round down if cannot reach exact value. Set to max Dragonframe.", min = 1, max = 60, default = 30)
@@ -545,6 +609,8 @@ class View3dPanel(Panel):
         row.prop(props, "painting_robot_axis_inversions")
         row = layout.row()
         row.prop(props, "prop_height_limit")
+        row = layout.row()
+        row.prop(props, "led_calibration")
         
         # Exposure paremeters
         layout.label(text="Exposure Settings", icon = 'CAMERA_DATA')
