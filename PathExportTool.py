@@ -84,7 +84,7 @@ bl_info = {
 }
 
 ip_in = "127.0.0.1"
-ip_out = "192.168.1.5" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
+ip_out = "YOUR IP" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
 port_in = 9000
 port_out = 8000
 buffer_size = 1024
@@ -97,21 +97,26 @@ props = None
 executingPainting = False
 cancelClicked = False
 
+currentColor = [0, 0, 0]
+currentWorldPos = Vector([0, 0, 0])
+currentMachinePos = Vector([0, 0, 0])
+
+pathFollower = None
+followPathConstraint = None
+
 class ExecutePainting(Operator):
+    global pathFollower
+    
     bl_idname = 'lightpainting.executepainting'
     bl_label = 'Execute light painting animation'
     
     lightPaths = []
     lightPathDirections = []
-    pathFollower = None
-    
+ 
     firstMove = True
     movingToNextPath = False
     outOfBounds = False
     overrideColor = False
-    currentColor = [0, 0, 0]
-    currentWorldPos = Vector([0, 0, 0])
-    currentMachinePos = Vector([0, 0, 0])
     
     machineOffset = None
     machineStepsPerUnit = None
@@ -119,68 +124,94 @@ class ExecutePainting(Operator):
     machineBounds = None
     
     def pointInWorkspace(self, p):
+        p = Vector([p.x, p.y, p.z]) - self.machineOffset # convert to machine space
         result = p.x >= 0 and p.y >= 0 and p.z >= 0 and p.x <= self.machineBounds.x and p.y <= self.machineBounds.y and p.z <= self.machineBounds.z
+        #print("Checking point ", p, " bounds: ", self.machineBounds, result)
         return result
     
     def getPathPosition(self, path, alpha):
+        global pathFollower, followPathConstraint
+        
         pathStart = path.data.bevel_factor_start
         pathEnd = path.data.bevel_factor_end
         if (pathEnd < pathStart):
             pathStart, pathEnd = pathEnd, pathStart
-            
-        followPathConstraint = self.pathFollower.constraints["Follow Path"]
+
         followPathConstraint.target = path
         followPathConstraint.offset_factor = max(min(alpha, pathEnd), pathStart)
         bpy.context.scene.update()
-        pos = self.pathFollower.matrix_world.to_translation()
+        
+        pos = pathFollower.matrix_world.to_translation()
         return Vector([pos.x, pos.y, pos.z, 1])
+    
+    def getPathColor(self, path):
+        color = None 
+        isBlack = True 
+        for node in path.material_slots[0].material.node_tree.nodes:
+            if (node.bl_idname == "ShaderNodeEmission"):
+                color = node.inputs[0].default_value
+                isBlack = color[0] <= 0 and color[1] <= 0 and color[2] <= 0 
+        return color, isBlack
     
     # Collect light paths, in optimized order for movement speed
     def collectPaths(self, context):
+        global props
+        followBlackPaths = props.follow_black_paths
+        
         self.lightPaths = []            # Path objects
         self.lightPathDirections = []   # 0 or 1 direction of path traversal
         
-        lightPaths = list(bpy.data.groups.get('LightPathGroup').objects)
-        lightPathDirections = [] #[0]
-        orderedLightPaths = [] #[lightPaths.pop(0)]
-            
-        # Filter out all light paths not in the workspace
-        for path in reversed(lightPaths):
+        lightPathsUnsorted = list(bpy.data.groups.get('LightPathGroup').objects)
+        orderedLightPaths = []
+        orderedLightPathDirections = []
+        
+        # Filter out all light paths not in the workspace or that are black
+        print("FILTERING OUT OF BOUNDS + BLACK PATHS")
+        for path in reversed(lightPathsUnsorted):
             start = self.getPathPosition(path, 0)
             end = self.getPathPosition(path, 1)
+            color, isBlack = self.getPathColor(path)
+            
+            if color is None:
+                print("PATH ", path, " HAS NO EMISSION NODE TO DETERMINE COLOR")
+                
             if (not self.pointInWorkspace(start) and not self.pointInWorkspace(end)):
-                lightPaths.remove(path)
-                print("Filtered out path ", path)
+                lightPathsUnsorted.remove(path)
+                print("Filtered out of bounds path ", path)
+            elif (isBlack and not followBlackPaths or color is None):
+                lightPathsUnsorted.remove(path)
+                print("Filtered black path ", path)
             
             
         # Determine first light path point by max height
+        print("DETERMINING START POSITION")
         firstEndpointPosition = None
         firstPathIndex = 0
         firstPathDirection = 0
         
-        for n in range(len(lightPaths)):
-            for index, path in enumerate(lightPaths):
-                for direction in [0, 1]:
-                    pos = self.getPathPosition(path, direction)
-                    if (firstEndpointPosition is None or pos.z > firstEndpointPosition.z):
-                        firstEndpointPosition = pos
-                        firstPathIndex = index
-                        firstPathDirection = direction
-                        
-        lightPathDirections = [firstPathDirection]
-        orderedLightPaths = [lightPaths.pop(firstPathIndex)]
-        
+        for index, path in enumerate(lightPathsUnsorted):
+            for direction in [0, 1]:
+                pos = self.getPathPosition(path, direction)
+                if (firstEndpointPosition is None or pos.z > firstEndpointPosition.z):
+                    firstEndpointPosition = pos
+                    firstPathIndex = index
+                    firstPathDirection = direction
+             
+        if len(lightPathsUnsorted) > 0:           
+            orderedLightPaths = [lightPathsUnsorted.pop(firstPathIndex)]
+            orderedLightPathDirections = [firstPathDirection]
         
         # Get sorted list of light paths/directions in order of closest path to the last path's end point
-        for n in range(len(lightPaths)):
+        print("GETTING SORTED LIST OF LIGHT PATHS")
+        for n in range(len(lightPathsUnsorted)):
             lastPath = orderedLightPaths[-1]
-            lastPos = self.getPathPosition(lastPath, 1 - lightPathDirections[-1])
+            lastPos = self.getPathPosition(lastPath, 1 - orderedLightPathDirections[-1])
     
             closestPathIndex = None
             pathDirection = None
             closestDist = None
             
-            for index, path in enumerate(lightPaths):
+            for index, path in enumerate(lightPathsUnsorted):
                 for direction in [0, 1]:
                     pos = self.getPathPosition(path, direction)
                     distToLast = (pos - lastPos).length
@@ -189,11 +220,11 @@ class ExecutePainting(Operator):
                         pathDirection = direction
                         closestDist = distToLast
                         
-            orderedLightPaths.append(lightPaths.pop(closestPathIndex))
-            lightPathDirections.append(pathDirection)
+            orderedLightPaths.append(lightPathsUnsorted.pop(closestPathIndex))
+            orderedLightPathDirections.append(pathDirection)
             
         self.lightPaths = orderedLightPaths
-        self.lightPathDirections = lightPathDirections
+        self.lightPathDirections = orderedLightPathDirections
         
         print("Ordered light paths: ", self.lightPaths)
         print("Light path directions: ", self.lightPathDirections)
@@ -203,10 +234,12 @@ class ExecutePainting(Operator):
         my_sender.simple_send_to("/blender/x", ['mov', x, y, z], (ip_out, port_out))
     
     def writeMovement(self, pos, doWriteNextPath):
+        global currentMachinePos, currentWorldPos, currentColor
+        
         worldPos = pos
         machinePos = pos - self.machineOffset
         
-        if (not self.pointInWorkspace(machinePos)):
+        if (not self.pointInWorkspace(worldPos)):
             if (not self.outOfBounds):
                 print("PATH LEFT MACHINE BOUNDS")
                 self.outOfBounds = True
@@ -216,20 +249,19 @@ class ExecutePainting(Operator):
         else:
             propInTheWay = False
             
-            
+            # iterate through scene props group and raycast for collisions
             props = list(bpy.data.groups.get('SceneProps').objects)
             for index, prop in enumerate(props):
-                origin = prop.matrix_world.inverted() * self.currentWorldPos
+                origin = prop.matrix_world.inverted() * currentWorldPos
                 dest = prop.matrix_world.inverted() * worldPos
                 direction = (dest - origin).normalized()
                 distance = (dest - origin).length 
-                hit, loc, norm, face = prop.ray_cast(origin, direction, distance)# Adding the distance parameter breaks it, but this is needed.
+                hit, loc, norm, face = prop.ray_cast(origin, direction, distance)
             
                 if (hit):
                     propInTheWay = True
                     break
-                
-                
+            
             if propInTheWay:
                 print("PROP IN THE WAY! ", self.movingToNextPath)
             
@@ -242,7 +274,7 @@ class ExecutePainting(Operator):
                 #else:
                 #    zHeight = 0
                     
-                self.writePosition(Vector([self.currentMachinePos.x, self.currentMachinePos.y, zHeight]))
+                self.writePosition(Vector([currentMachinePos.x, currentMachinePos.y, zHeight]))
                 self.writePosition(Vector([machinePos.x, machinePos.y, zHeight]))
                 self.firstMove = False
                 
@@ -250,11 +282,11 @@ class ExecutePainting(Operator):
                 # NextPath signals are checkpoints that arduino uses to know when to break up
                 # light paths across the multiple exposures
                 self.writeNextPath()
-                self.writeColor(self.currentColor[0], self.currentColor[1], self.currentColor[2])
+                self.writeColor(currentColor[0], currentColor[1], currentColor[2])
                    
             self.writePosition(machinePos)
-            self.currentWorldPos = worldPos
-            self.currentMachinePos = machinePos
+            currentWorldPos = worldPos
+            currentMachinePos = machinePos
             
             if (self.outOfBounds):
                 self.outOfBounds = False
@@ -264,19 +296,21 @@ class ExecutePainting(Operator):
             
             
     def writeColor(self, r, g , b):
+        global currentColor
         r = int(r)
         g = int(g)
         b = int(b)
-        self.currentColor = [r, g, b]
+        currentColor = [r, g, b]
         if (not self.overrideColor):
             my_sender.simple_send_to("/blender/x", ['col', r, g, b], (ip_out, port_out))
         
     def setColorOverride(self, override):
+        global currentColor
         self.overrideColor = override
         if (override):
             my_sender.simple_send_to("/blender/x", ['col', 0, 0, 0], (ip_out, port_out))
         else:
-            self.writeColor(self.currentColor[0], self.currentColor[1] , self.currentColor[2])
+            self.writeColor(currentColor[0], currentColor[1] , currentColor[2])
       
     def writeSpeed(self):
         # steps per second
@@ -317,11 +351,9 @@ class ExecutePainting(Operator):
     
     # Send path info commands to machine
     def sendFrameMovement(self, context):
-        global props
+        global props, currentMachinePos, currentWorldPos, currentColor, pathFollower, followPathConstraint
         
-        traverseIncrement = props.light_path_traverse_increment
-        traverseThreshold = props.light_path_traverse_threshold
-        followBlackPaths = props.follow_black_paths
+        print("Sending frame ", context.scene.frame_current)
         
         self.writeFrameNumber(context)
         self.writeWorkspaceSize()
@@ -332,10 +364,20 @@ class ExecutePainting(Operator):
         self.writeExposureTime()
         self.writeYieldThreshold()
         
+        # enable all layers so that geometry loads for collision avoidance raycasting
+        enabledLayers = []
+        for i in range(len(bpy.context.scene.layers)):
+            if bpy.context.scene.layers[i] == False:
+                enabledLayers.append(i)
+                bpy.context.scene.layers[i] = True 
+            
+        # Collect ordered list of light paths
         self.collectPaths(context)
 
-        lastPos = None
-        followPathConstraint = self.pathFollower.constraints["Follow Path"]
+        # Iterate through ordered list and send commands
+        lastPos = None        
+        traverseIncrement = props.light_path_traverse_increment
+        traverseThreshold = props.light_path_traverse_threshold
         
         for path, direction in zip(self.lightPaths, self.lightPathDirections):
             pathStart = path.data.bevel_factor_start
@@ -343,30 +385,20 @@ class ExecutePainting(Operator):
             if (pathEnd < pathStart):
                 pathStart, pathEnd = pathEnd, pathStart
                 
-            color = None 
-            isBlack = True 
-            
-            for node in path.material_slots[0].material.node_tree.nodes:
-                if (node.bl_idname == "ShaderNodeEmission"):
-                    color = node.inputs[0].default_value
-                    isBlack = color[0] <= 0 and color[1] <= 0 and color[2] <= 0
-            
-            if color is None:
-                print("PATH ", path, " HAS NO EMISSION NODE TO DETERMINE COLOR")
-   
-            if abs(pathStart - pathEnd) > 0.001 and not (isBlack and not followBlackPaths):
+            if abs(pathStart - pathEnd) > 0.001:
+                color, isBlack = self.getPathColor(path)
                 
                 followPathConstraint.target = path
                 followPathConstraint.offset_factor = max(min(direction, pathEnd), pathStart)
                 context.scene.update()
-                pos = self.pathFollower.matrix_world.to_translation()
+                pos = pathFollower.matrix_world.to_translation()
                 lastPos = pos#.copy()
                 
                 self.writeColor(0,0,0)
                 self.movingToNextPath = True
                 self.writeMovement(pos, False)
                 self.movingToNextPath = False
-                self.currentColor = [color[0] * 255, color[1] * 255, color[2] * 255]
+                currentColor = [color[0] * 255, color[1] * 255, color[2] * 255]
                 
                 #if color[0] > 0 or color[1] > 0 or color[2] > 0:
                  #   self.writeNextPath()
@@ -387,7 +419,7 @@ class ExecutePainting(Operator):
                     
                     followPathConstraint.offset_factor = offset
                     context.scene.update()
-                    pos = self.pathFollower.matrix_world.to_translation()
+                    pos = pathFollower.matrix_world.to_translation()
 
 
                 self.writeMovement(pos, False)
@@ -395,21 +427,25 @@ class ExecutePainting(Operator):
         if self.homeWandAfterFrame:
             self.writeColor(0, 0, 0)
             zHeight = max(min(self.propHeightLimit, self.machineBounds.z), 0)
-            self.writePosition(Vector([self.currentMachinePos.x, self.currentMachinePos.y, zHeight]))
+            self.writePosition(Vector([currentMachinePos.x, currentMachinePos.y, zHeight]))
             self.writePosition(Vector([0, 0, zHeight]))
         
         self.writeFinish()
         bpy.ops.screen.frame_offset(delta = 1)
+        
+        # disable enabled layers
+        for _, i in enumerate(enabledLayers):
+            bpy.context.scene.layers[i] = False
     
     
     # Clean up objects and variables on finish/cancel
     def cleanup(self):
-        global executingPainting
+        global executingPainting, pathFollower
         executingPainting = False
-        if not (self.pathFollower is None):
-            bpy.context.scene.objects.active = self.pathFollower
+        if not (pathFollower is None):
+            bpy.context.scene.objects.active = pathFollower
             bpy.ops.object.delete()
-            self.pathFollower = None
+            pathFollower = None
     
     
     # Modal is called during execution
@@ -428,8 +464,7 @@ class ExecutePainting(Operator):
             # Check for incoming signal from OSC that path has been drawn
             data = my_receiver.get_data()
             if data:
-                print("OSC data received: ")
-                print(data)
+                print("OSC data received: ", data)
             if not (data is None) and data[0] == "finished" and data[2] == context.scene.frame_current - 1:
                 self.sendFrameMovement(context)
         
@@ -438,7 +473,7 @@ class ExecutePainting(Operator):
 
     # Execute is called once starting drawing
     def execute(self, context):          
-        global props, cancelClicked, executingPainting
+        global props, cancelClicked, executingPainting, pathFollower, followPathConstraint
         
         executingPainting = True
         cancelClicked = False
@@ -454,13 +489,6 @@ class ExecutePainting(Operator):
         self.exposureTime = props.exposure_time
         self.exposureYieldThreshold = props.exposure_yield_threshold
         self.homeWandAfterFrame = props.home_wand_after_frame
-    
-        # enable all layers so that geometry loads for collision avoidance raycasting
-        enabledLayers = []
-        for i in range(len(bpy.context.scene.layers)):
-            if bpy.context.scene.layers[i] == False:
-                enabledLayers.append(i)
-                bpy.context.scene.layers[i] = True
         
         bpy.ops.screen.animation_cancel(restore_frame = False)
         bpy.ops.screen.frame_jump(end = False)
@@ -468,19 +496,17 @@ class ExecutePainting(Operator):
         
         bpy.ops.object.empty_add(location = (0,0,0))
         bpy.ops.object.constraint_add(type='FOLLOW_PATH')
-        bpy.context.scene.objects.active.constraints["Follow Path"].use_fixed_location = True
-        self.pathFollower = bpy.context.scene.objects.active
+        pathFollower = bpy.context.scene.objects.active
+        pathFollower.name = "Path Follower"
+        followPathConstraint = pathFollower.constraints["Follow Path"]
+        followPathConstraint.use_fixed_location = True
         
         wm = context.window_manager
         self._timer = wm.event_timer_add(1.0, context.window)
         wm.modal_handler_add(self)
         
         self.sendFrameMovement(context)
-        
-        # disable enabled layers
-        for _, i in enumerate(enabledLayers):
-            bpy.context.scene.layers[i] = False
-            
+      
         return {'RUNNING_MODAL'}
 
     def cancel(self, context):
