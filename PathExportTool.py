@@ -84,7 +84,7 @@ bl_info = {
 }
 
 ip_in = "127.0.0.1"
-ip_out = "YOUR IP" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
+ip_out = "192.168.1.5" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
 port_in = 9000
 port_out = 8000
 buffer_size = 1024
@@ -157,6 +157,7 @@ class ExecutePainting(Operator):
     def collectPaths(self, context):
         global props
         followBlackPaths = props.follow_black_paths
+        traverseThreshold = props.light_path_traverse_threshold
         
         self.lightPaths = []            # Path objects
         self.lightPathDirections = []   # 0 or 1 direction of path traversal
@@ -165,8 +166,8 @@ class ExecutePainting(Operator):
         orderedLightPaths = []
         orderedLightPathDirections = []
         
-        # Filter out all light paths not in the workspace or that are black
-        print("FILTERING OUT OF BOUNDS + BLACK PATHS")
+        # Filter out all light paths not in the workspace or that are black or that are too short
+        print("FILTERING OUT OF BOUNDS + BLACK + SHORT PATHS")
         for path in reversed(lightPathsUnsorted):
             start = self.getPathPosition(path, 0)
             end = self.getPathPosition(path, 1)
@@ -181,6 +182,9 @@ class ExecutePainting(Operator):
             elif (isBlack and not followBlackPaths or color is None):
                 lightPathsUnsorted.remove(path)
                 print("Filtered black path ", path)
+            elif (start - end).length < traverseThreshold:
+                lightPathsUnsorted.remove(path)
+                print("Filtered short path ", path)
             
             
         # Determine first light path point by max height
@@ -384,45 +388,40 @@ class ExecutePainting(Operator):
             pathEnd = path.data.bevel_factor_end
             if (pathEnd < pathStart):
                 pathStart, pathEnd = pathEnd, pathStart
+            
+            followPathConstraint.target = path
+            followPathConstraint.offset_factor = max(min(direction, pathEnd), pathStart)
+            context.scene.update()
+            pos = pathFollower.matrix_world.to_translation()
+            lastPos = pos#.copy()
+            
+            color, isBlack = self.getPathColor(path)
+            recordNextPathMarker = not isBlack
+            
+            self.writeColor(0,0,0)
+            self.movingToNextPath = True
+            self.writeMovement(pos, False)
+            self.movingToNextPath = False
+            currentColor = [color[0] * 255, color[1] * 255, color[2] * 255]
+            
+            alpha = 0.0
+            while alpha < 1.0:
+                #print("Pos: "+ str(pos) + " Lastpos: " + str(lastPos) + " Dist: " + str((pos - lastPos).length))
+                if (pos - lastPos).length >= traverseThreshold:
+                    if self.writeMovement(pos, recordNextPathMarker) and recordNextPathMarker:
+                        recordNextPathMarker = False
+                    lastPos = pos#.copy()
                 
-            if abs(pathStart - pathEnd) > 0.001:
-                color, isBlack = self.getPathColor(path)
+                alpha = alpha + traverseIncrement
+                offset = abs(direction - alpha)
+                offset = max(min(offset, pathEnd), pathStart)
                 
-                followPathConstraint.target = path
-                followPathConstraint.offset_factor = max(min(direction, pathEnd), pathStart)
+                followPathConstraint.offset_factor = offset
                 context.scene.update()
                 pos = pathFollower.matrix_world.to_translation()
-                lastPos = pos#.copy()
-                
-                self.writeColor(0,0,0)
-                self.movingToNextPath = True
-                self.writeMovement(pos, False)
-                self.movingToNextPath = False
-                currentColor = [color[0] * 255, color[1] * 255, color[2] * 255]
-                
-                #if color[0] > 0 or color[1] > 0 or color[2] > 0:
-                 #   self.writeNextPath()
-                    
-                recordNextPathMarker = not isBlack
-                
-                alpha = 0.0
-                while alpha < 1.0:
-                    #print("Pos: "+ str(pos) + " Lastpos: " + str(lastPos) + " Dist: " + str((pos - lastPos).length))
-                    if (pos - lastPos).length >= traverseThreshold:
-                        if self.writeMovement(pos, recordNextPathMarker) and recordNextPathMarker:
-                            recordNextPathMarker = False
-                        lastPos = pos#.copy()
-                    
-                    alpha = alpha + traverseIncrement
-                    offset = abs(direction - alpha)
-                    offset = max(min(offset, pathEnd), pathStart)
-                    
-                    followPathConstraint.offset_factor = offset
-                    context.scene.update()
-                    pos = pathFollower.matrix_world.to_translation()
 
 
-                self.writeMovement(pos, False)
+            self.writeMovement(pos, False)
         
         if self.homeWandAfterFrame:
             self.writeColor(0, 0, 0)
@@ -431,7 +430,9 @@ class ExecutePainting(Operator):
             self.writePosition(Vector([0, 0, zHeight]))
         
         self.writeFinish()
-        bpy.ops.screen.frame_offset(delta = 1)
+        
+        if context.scene.frame_current < context.scene.frame_end:
+            bpy.ops.screen.frame_offset(delta = 1)
         
         # disable enabled layers
         for _, i in enumerate(enabledLayers):
@@ -456,17 +457,17 @@ class ExecutePainting(Operator):
             self.cleanup()
             return {'CANCELLED'}
         
-        if context.scene.frame_current >= context.scene.frame_end:
-            self.cleanup()
-            return {'FINISHED'}
-        
         if event.type == 'TIMER':
             # Check for incoming signal from OSC that path has been drawn
             data = my_receiver.get_data()
             if data:
                 print("OSC data received: ", data)
             if not (data is None) and data[0] == "finished" and data[2] == context.scene.frame_current - 1:
+                lastFrame = context.scene.frame_current >= context.scene.frame_end
                 self.sendFrameMovement(context)
+                if lastFrame:
+                    self.cleanup()
+                    return {'FINISHED'}
         
         return {'PASS_THROUGH'}
 
