@@ -84,7 +84,7 @@ bl_info = {
 }
 
 ip_in = "127.0.0.1"
-ip_out = "192.168.1.5" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
+ip_out = "YOUR IP" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
 port_in = 9000
 port_out = 8000
 buffer_size = 1024
@@ -182,7 +182,7 @@ class ExecutePainting(Operator):
             elif (isBlack and not followBlackPaths or color is None):
                 lightPathsUnsorted.remove(path)
                 print("Filtered black path ", path)
-            elif (start - end).length < traverseThreshold:
+            elif (start - end).length < 0.0001:
                 lightPathsUnsorted.remove(path)
                 print("Filtered short path ", path)
             
@@ -283,8 +283,8 @@ class ExecutePainting(Operator):
                 self.firstMove = False
                 
             if doWriteNextPath:
-                # NextPath signals are checkpoints that arduino uses to know when to break up
-                # light paths across the multiple exposures
+                # NextPath signals are checkpoints at tge start of each path that
+                # arduino uses to know when to break up light paths across the multiple exposures
                 self.writeNextPath()
                 self.writeColor(currentColor[0], currentColor[1], currentColor[2])
                    
@@ -395,23 +395,23 @@ class ExecutePainting(Operator):
             pos = pathFollower.matrix_world.to_translation()
             lastPos = pos#.copy()
             
-            color, isBlack = self.getPathColor(path)
-            recordNextPathMarker = not isBlack
-            
             self.writeColor(0,0,0)
             self.movingToNextPath = True
             self.writeMovement(pos, False)
             self.movingToNextPath = False
+            
+            color, isBlack = self.getPathColor(path)
+            recordNextPathMarker = not isBlack
             currentColor = [color[0] * 255, color[1] * 255, color[2] * 255]
             
             alpha = 0.0
-            while alpha < 1.0:
+            while alpha <= 1.0:
                 #print("Pos: "+ str(pos) + " Lastpos: " + str(lastPos) + " Dist: " + str((pos - lastPos).length))
                 if (pos - lastPos).length >= traverseThreshold:
                     if self.writeMovement(pos, recordNextPathMarker) and recordNextPathMarker:
                         recordNextPathMarker = False
-                    lastPos = pos#.copy()
-                
+                    lastPos = pos
+
                 alpha = alpha + traverseIncrement
                 offset = abs(direction - alpha)
                 offset = max(min(offset, pathEnd), pathStart)
@@ -420,8 +420,7 @@ class ExecutePainting(Operator):
                 context.scene.update()
                 pos = pathFollower.matrix_world.to_translation()
 
-
-            self.writeMovement(pos, False)
+            self.writeMovement(pos, recordNextPathMarker)
         
         if self.homeWandAfterFrame:
             self.writeColor(0, 0, 0)
