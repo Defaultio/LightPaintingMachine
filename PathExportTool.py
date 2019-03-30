@@ -95,6 +95,7 @@ my_sender = Send(verbose=True)
 props = None
 
 executingPainting = False
+isFirstMove = False
 cancelClicked = False
 
 currentColor = [0, 0, 0]
@@ -113,7 +114,6 @@ class ExecutePainting(Operator):
     lightPaths = []
     lightPathDirections = []
  
-    firstMove = True
     movingToNextPath = False
     outOfBounds = False
     overrideColor = False
@@ -239,7 +239,7 @@ class ExecutePainting(Operator):
         my_sender.simple_send_to("/blender/x", ['mov', x, y, z], (ip_out, port_out))
     
     def writeMovement(self, pos, doWriteNextPath):
-        global currentMachinePos, currentWorldPos, currentColor
+        global currentMachinePos, currentWorldPos, currentColor, isFirstMove
         
         worldPos = pos
         machinePos = pos - self.machineOffset
@@ -271,7 +271,7 @@ class ExecutePainting(Operator):
                 print("PROP IN THE WAY! ", self.movingToNextPath)
             
             # If first move or there is prop in the way and moving to a new path then avoid obstacle
-            if (self.movingToNextPath and propInTheWay or self.firstMove):
+            if (self.movingToNextPath and propInTheWay or isFirstMove):
                 print("Something is in the way! Avoiding obstacle.")
                 zHeight = max(min(self.propHeightLimit, self.machineBounds.z), 0)
                 #if (self.machineAxisInversions[2]):
@@ -281,7 +281,7 @@ class ExecutePainting(Operator):
                     
                 self.writePosition(Vector([currentMachinePos.x, currentMachinePos.y, zHeight]))
                 self.writePosition(Vector([machinePos.x, machinePos.y, zHeight]))
-                self.firstMove = False
+                isFirstMove = False
                 
             if doWriteNextPath:
                 # NextPath signals are checkpoints at tge start of each path that
@@ -356,7 +356,7 @@ class ExecutePainting(Operator):
     
     # Send path info commands to machine
     def sendFrameMovement(self, context):
-        global props, currentMachinePos, currentWorldPos, currentColor, pathFollower, followPathConstraint
+        global props, currentMachinePos, currentWorldPos, currentColor, pathFollower, followPathConstraint, isFirstMove
         
         print("Sending frame ", context.scene.frame_current)
         
@@ -380,6 +380,7 @@ class ExecutePainting(Operator):
         self.collectPaths(context)
 
         # Iterate through ordered list and send commands
+        isFirstMove = True
         lastPos = None        
         traverseIncrement = props.light_path_traverse_increment
         traverseThreshold = props.light_path_traverse_threshold
