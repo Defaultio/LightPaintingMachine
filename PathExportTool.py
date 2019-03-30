@@ -138,7 +138,7 @@ class ExecutePainting(Operator):
             pathStart, pathEnd = pathEnd, pathStart
 
         followPathConstraint.target = path
-        followPathConstraint.offset_factor = max(min(alpha, pathEnd), pathStart)
+        followPathConstraint.offset_factor = (pathEnd - pathStart) * alpha + pathStart #max(min(alpha, pathEnd), pathStart)
         bpy.context.scene.update()
         
         pos = pathFollower.matrix_world.to_translation()
@@ -171,6 +171,7 @@ class ExecutePainting(Operator):
         for path in reversed(lightPathsUnsorted):
             start = self.getPathPosition(path, 0)
             end = self.getPathPosition(path, 1)
+            mid = self.getPathPosition(path, 0.5)
             color, isBlack = self.getPathColor(path)
             
             if color is None:
@@ -182,7 +183,7 @@ class ExecutePainting(Operator):
             elif (isBlack and not followBlackPaths or color is None):
                 lightPathsUnsorted.remove(path)
                 print("Filtered black path ", path)
-            elif (start - end).length < 0.0001:
+            elif (start - end).length < 0.0001 and (start - mid).length < 0.0001:
                 lightPathsUnsorted.remove(path)
                 print("Filtered short path ", path)
             
@@ -462,9 +463,9 @@ class ExecutePainting(Operator):
             if data:
                 print("OSC data received: ", data)
             if not (data is None) and data[0] == "finished" and data[2] == context.scene.frame_current - 1:
-                lastFrame = context.scene.frame_current >= context.scene.frame_end
+                isLastFrame = context.scene.frame_current >= context.scene.frame_end
                 self.sendFrameMovement(context)
-                if lastFrame:
+                if isLastFrame:
                     self.cleanup()
                     return {'FINISHED'}
         
