@@ -131,7 +131,7 @@ _PathExportTool.py_ automatically creates a "SceneProps" object group. If there 
 
 If using a bash light, in DMX settings, set the Power up Time, Lights up Settle Time, and Bash off Settle Time all to 0 to minimize time between frames.
 
-If you're having any touble at all getting this to work, please contact me! There's a lot involved here and I'm sure I've left stuff out. joshjamsheldon@gmail.com.
+If you're having any touble at all getting this to work, please contact me! There's a lot involved here and I'm sure I've left stuff out. josh@jshel.co
 
 
 **Incorporating motion control**
