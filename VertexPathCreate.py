@@ -7,7 +7,7 @@ bl_info = {
     "name": "Adorn Mesh Vertices With Path Tool",
     "author": "Josh Sheldon",
     "category": "Add Curve",
-    "blender": (2, 7, 9)    
+    "blender": (3, 0, 0)    
 }
 
 
@@ -33,15 +33,31 @@ class BuildPathOperator(Operator):
     emptyList = []
     
     
+    # Set up collections
+    global lightPathsCollection
+    global lightPathPointsCollection
+    if "Light Paths" not in bpy.data.collections:
+        lightPathsCollection = bpy.data.collections.new("Light Paths")
+        bpy.context.scene.collection.children.link(lightPathsCollection)
+    else:
+        lightPathsCollection = bpy.data.collections["Light Paths"]
+        
+    if "Light Path Points" not in bpy.data.collections:
+        lightPathPointsCollection = bpy.data.collections.new("Light Path Points")
+        bpy.context.scene.collection.children.link(lightPathPointsCollection)
+    else:
+        lightPathPointsCollection = bpy.data.collections["Light Path Points"]
+    
+    
     # Enter object mode and store the selected mesh for later recall
     def objectMode(self):
         bpy.ops.object.mode_set(mode='OBJECT')
-        self.selectedMesh = bpy.context.scene.objects.active
+        self.selectedMesh = bpy.context.active_object
         
         
     # Reselect the original mesh and enter edit mode
     def editMode(self):
-        bpy.context.scene.objects.active = self.selectedMesh
+        bpy.context.view_layer.objects.active = self.selectedMesh
         bpy.ops.object.mode_set(mode='EDIT') 
     
     
@@ -49,16 +65,15 @@ class BuildPathOperator(Operator):
     def initializeLightCircle(self):
         self.objectMode()
         if bpy.data.objects.get("LightCircle") is None:
-            bpy.ops.curve.primitive_bezier_circle_add(location=(0, 0, -5), layers=(False, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False))
+            bpy.ops.curve.primitive_bezier_circle_add(location=(0, 0, -5))
+            if lightPathsCollection not in bpy.context.active_object.users_collection:
+                lightPathPointsCollection.objects.link(bpy.context.active_object)
             bpy.ops.transform.resize(value=(0.375, 0.375, 0.375))
-            bpy.context.scene.objects.active.name = "LightCircle"
+            bpy.context.active_object.name = "LightCircle"
             
         if not ('LightPathMaterial' in bpy.data.materials):
             mat = bpy.data.materials.new(name = 'LightPathMaterial')
             mat.diffuse_color = (0.2, 1, 0.2)
-        
-        if not ('LightPathGroup' in bpy.data.groups):
-            bpy.data.groups.new(name = 'LightPathGroup')
             
         self.editMode()
         
@@ -69,7 +84,7 @@ class BuildPathOperator(Operator):
         
         if not (self.pathCurve is None):
             bpy.ops.object.select_all(action='DESELECT')
-            self.pathCurve.select = True
+            self.pathCurve.select_set(state = True)
             bpy.ops.object.delete() # this causes occasional crashes?
             self.pathCurve = None
             
@@ -80,15 +95,15 @@ class BuildPathOperator(Operator):
             firstVertex = self.selectedMesh.data.vertices[self.vertexList[0]].co
             
             objectdata = bpy.data.objects.new("LightPath", curvedata)  
-            objectdata.location = self.selectedMesh.matrix_world * firstVertex
-            bpy.context.scene.objects.link(objectdata)  
+            objectdata.location = self.selectedMesh.matrix_world @ firstVertex
+            lightPathsCollection.objects.link(objectdata)
           
             spline = curvedata.splines.new('NURBS')  
             spline.points.add(len(self.vertexList)-1)  
             
             for index, vertexIndex in enumerate(self.vertexList):
                 empty = self.emptyList[index]
-                x, y, z = self.selectedMesh.matrix_world * self.selectedMesh.data.vertices[vertexIndex].co - self.selectedMesh.matrix_world * firstVertex
+                x, y, z = self.selectedMesh.matrix_world @ self.selectedMesh.data.vertices[vertexIndex].co - self.selectedMesh.matrix_world @ firstVertex
                 spline.points[index].co = (x, y, z, 1) # last parameter is weight
           
             spline.order_u = 3 #len(spline.points)-1
@@ -96,12 +111,10 @@ class BuildPathOperator(Operator):
             
             curvedata.use_fill_caps = True
             curvedata.bevel_object = bpy.data.objects["LightCircle"]
-            objectdata.layers=(False, False, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False)
             
             self.pathCurve = objectdata
             objectdata.data.materials.append(bpy.data.materials['LightPathMaterial'])
             
-            bpy.data.groups.get('LightPathGroup').objects.link(objectdata)
             
         self.editMode()
 
@@ -121,14 +134,14 @@ class BuildPathOperator(Operator):
             hook.object = empty
             
             # vertex parent empty
-            bpy.context.scene.objects.active = self.selectedMesh
-            empty.select = True
+            bpy.context.view_layer.objects.active = self.selectedMesh
+            empty.select_set(state = True)
             bpy.ops.object.parent_set(type='VERTEX') # this caused crashes occasionally in the vertex selected function
             bpy.ops.object.select_all(action='DESELECT')
             
         #self.pathCurve['light_path_transparency'] = bpy.props.FloatProperty(name="Path Transparency", description = "Transparency of light path, this value is multiuplied by the color for the final value. Can be used with animation to fade paths in or disable paths.", default = 0.0, min = 0.0, max = 1.0, soft_min = 0.0, soft_max = 1.0, step = 0.01, precision = 2)
         
-        bpy.context.scene.objects.active = self.pathCurve
+        bpy.context.view_layer.objects.active = self.pathCurve
         bpy.ops.object.mode_set(mode='EDIT') 
         bpy.ops.curve.select_all(action='DESELECT')
 
@@ -159,10 +172,14 @@ class BuildPathOperator(Operator):
         
         position = self.selectedMesh.data.vertices[index].co
 
-        bpy.ops.object.empty_add(location=self.selectedMesh.matrix_world*position, layers=(False, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False))
+        bpy.ops.object.empty_add(location=self.selectedMesh.matrix_world @ position)
         bpy.ops.transform.resize(value=(2, 2, 2))
         
-        newEmpty = bpy.context.scene.objects.active
+        newEmpty = bpy.context.active_object
+        
+        #if lightPathPointsCollection not in newEmpty.users_collection:
+        lightPathPointsCollection.objects.link(newEmpty)
+           
         self.emptyList.append(newEmpty)
         
         self.editMode()
@@ -174,7 +191,7 @@ class BuildPathOperator(Operator):
         if len(self.emptyList) > 0:
             self.objectMode()
             
-            self.emptyList[-1].select = True
+            self.emptyList[-1].select_set(state = True)
             bpy.ops.object.delete()
             
             self.emptyList = self.emptyList[:-1]
@@ -194,10 +211,10 @@ class BuildPathOperator(Operator):
         bpy.ops.object.select_all(action='DESELECT')
         
         if not self.pathCurve is None:
-            self.pathCurve.select = True
+            self.pathCurve.select_set(state = True)
             
         for index, empty in zip(self.vertexList, self.emptyList):
-            empty.select = True
+            empty.select_set(state = True)
             
         bpy.ops.object.delete()
         
@@ -217,7 +234,7 @@ class BuildPathOperator(Operator):
         
         if not (bpy.context.object.mode == 'EDIT'):
             cancelClicked = True
-        
+          
         if event.type == 'ESC' and event.value == 'CLICK' or event.type == 'RIGHTMOUSE' or cancelClicked:
             buildingPath = False
             self.cancelCleanup()
@@ -244,7 +261,7 @@ class BuildPathOperator(Operator):
             self.undoPath()
             print("UNDO")
         
-        if event.type == 'LEFTMOUSE':  
+        if event.type == 'LEFTMOUSE' or event.type == "MOUSEMOVE": #butchering this just to make the race condition work; bm.select_history isn't updated yet when we reach the left mouse click event here
             ob = bpy.context.object
             me = ob.data
             bm = bmesh.from_edit_mesh(me)
@@ -267,9 +284,9 @@ class BuildPathOperator(Operator):
         self.vertexList = []
         self.emptyList = []
         
-        bpy.context.scene.layers[0] = True
-        bpy.context.scene.layers[1] = True
-        bpy.context.scene.layers[2] = True
+        lightPathsCollection.hide_viewport  = False
+        lightPathPointsCollection.hide_viewport  = False
+        
         bpy.ops.screen.animation_cancel(restore_frame = False)
         bpy.ops.screen.frame_jump(end = False)
         self.initializeLightCircle()
@@ -324,7 +341,7 @@ class UndoPathOperator(Operator):
 class View3dPanel(Panel):
     bl_idname = "PAINTING_PT_path_create"
     bl_space_type = 'VIEW_3D'
-    bl_region_type = 'TOOLS'
+    bl_region_type = 'UI'
     bl_label = 'Light Painting Tools'
     bl_context = 'mesh_edit'
     bl_category = 'Light Painting'
