@@ -110,6 +110,7 @@ class BuildPathOperator(Operator):
             spline.use_endpoint_u = True
             
             curvedata.use_fill_caps = True
+            curvedata.bevel_mode = 'OBJECT'
             curvedata.bevel_object = bpy.data.objects["LightCircle"]
             
             self.pathCurve = objectdata
