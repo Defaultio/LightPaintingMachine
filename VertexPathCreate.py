@@ -73,7 +73,7 @@ class BuildPathOperator(Operator):
             
         if not ('LightPathMaterial' in bpy.data.materials):
             mat = bpy.data.materials.new(name = 'LightPathMaterial')
-            mat.diffuse_color = (0.2, 1, 0.2)
+            mat.diffuse_color = (0.2, 1, 0.2, 1)
             
         self.editMode()
         
