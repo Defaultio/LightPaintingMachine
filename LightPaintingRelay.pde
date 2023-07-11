@@ -41,13 +41,14 @@ void setup()
   oscP5 = new OscP5(this, 8000);
   myRemoteLocation = new NetAddress("127.0.0.1", 9000);
   
+  printArray(Serial.list());
   String portName = Serial.list()[PORT_NUM];
   myPort = new Serial(this, portName, 9600);
   myPort.bufferUntil('\n'); 
   
   currentState = "Waiting for OSC input from Blender";
   
-  oscP5.send(new OscMessage("startup"), myRemoteLocation); 
+  oscP5.send(new OscMessage("/startup"), myRemoteLocation); 
 }
 
 
@@ -56,8 +57,8 @@ void draw()
   background(0); 
   textFont(font);
   fill(255);
-  textAlign(CENTER);
-  text(currentState + "\n Arduino Serial: " + arduinoSerial, width / 2, height / 2); 
+  textAlign(CENTER, CENTER);
+  text(currentState + "\n Arduino Serial: " + arduinoSerial, 0, 0, width, height); 
 
 }
 
@@ -116,9 +117,7 @@ void paintingExecutionFinished()
 {
   currentState = "Painting execution finished; returning OSC to blender";
   
-  /* in the following different ways of creating osc messages are shown by example */
-  OscMessage myMessage = new OscMessage("finished");
- 
+  OscMessage myMessage = new OscMessage("/finished");
   myMessage.add(currentFrame); /* add an int to the osc message */
 
   /* send the message */
