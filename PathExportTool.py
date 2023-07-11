@@ -2,10 +2,10 @@
 #   Get global coordinate after constraints:    https://blenderartists.org/forum/archive/index.php/t-180777.html
 #                                               https://blender.stackexchange.com/questions/7576/how-can-i-use-a-python-script-to-get-the-transformation-of-an-object
 #   Custom properties:                          https://blenderartists.org/forum/archive/index.php/t-336028.html
-#   OSC library:                                https://github.com/sergeLabo/blenderOSC
+#   OSC library:                                https://github.com/kivy/oscpy
 #   Raycast:                                    https://blender.stackexchange.com/questions/50716/strange-object-ray-cast-behavior 
 
-
+# Install OSC library into blender python packages directory - C:\Program Files\Blender Foundation\Blender 3.6\3.6\python\lib\site-packages
 
 # Function:
 
@@ -62,7 +62,8 @@
 
 
 # Notes:
-#   Ensure DMC16 is set to close relay -during- exposure.
+#   Ensure DMC16 is set to close relay -during- exposure
+#   Ensure DMC16 is set for switch input to trigger SHOOT 
 #   Ensure ip_out matches IP reported in processing output on program startup
 #   Ensure all power up, bash light, and settling times in dragonframe lighting settings are 0 seconds
 #   Ensure frame move speed is 1x jog speed for slow axes of movement.
@@ -74,29 +75,31 @@ import bmesh
 import math
 from bpy.types import Panel, Operator
 from mathutils import Vector
-from send_receive import Receive, Send
+from oscpy.server import OSCThreadServer
+from oscpy.client import OSCClient
 
 bl_info = {
     "name": "Light Painting Path Export Tool",
     "author": "Josh Sheldon",
     "category": "Import-Export",
-    "blender": (2, 7, 9)    
+    "blender": (3, 0, 0)    
 }
 
 ip_in = "127.0.0.1"
-ip_out = "YOUR IP" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
+ip_out = "192.YOUR.IP.ADDRESS" # **YOUR IP ADDRESS**  Not sure how to change this on Processing side to just be localhost. Need to update this value to whatever processing says the address is
 port_in = 9000
 port_out = 8000
 buffer_size = 1024
 
-my_receiver = Receive(ip_in, port_in, buffer_size, verbose=True)
-my_sender = Send(verbose=True)
+osc_receiver = OSCThreadServer()
+osc_sender = OSCClient(ip_out, port_out)
 
 props = None
 
 executingPainting = False
 isFirstMove = False
 cancelClicked = False
+finishReceived = False
 
 currentColor = [0, 0, 0]
 currentWorldPos = Vector([0, 0, 0])
@@ -105,8 +108,18 @@ currentMachinePos = Vector([0, 0, 0])
 pathFollower = None
 followPathConstraint = None
 
+def callback(*data):
+    global finishReceived
+    print("OSC server got values: {}".format(data))
+    print("Frame: ", data[0], data[0] == bpy.context.scene.frame_current - 1)
+    if data[0] == bpy.context.scene.frame_current - 1:
+        finishReceived = True
+
+sock = osc_receiver.listen(address=ip_in, port=port_in, default=True)
+osc_receiver.bind(b'/finished', callback)
+
 class ExecutePainting(Operator):
-    global pathFollower
+    global pathFollower, finishReceived
     
     bl_idname = 'lightpainting.executepainting'
     bl_label = 'Execute light painting animation'
@@ -121,8 +134,14 @@ class ExecutePainting(Operator):
     machineOffset = None
     machineStepsPerUnit = None
     machineSpeed = None
+    machineSpeedDark = None
     machineBounds = None
     
+    
+    def sendOSC(self, address,  values):
+        print("OSC send" , address, "{}".format(values))
+        osc_sender.send_message(address, values)
+
     def pointInWorkspace(self, p):
         p = Vector([p.x, p.y, p.z]) - self.machineOffset # convert to machine space
         result = p.x >= 0 and p.y >= 0 and p.z >= 0 and p.x <= self.machineBounds.x and p.y <= self.machineBounds.y and p.z <= self.machineBounds.z
@@ -139,7 +158,7 @@ class ExecutePainting(Operator):
 
         followPathConstraint.target = path
         followPathConstraint.offset_factor = (pathEnd - pathStart) * alpha + pathStart #max(min(alpha, pathEnd), pathStart)
-        bpy.context.scene.update()
+        bpy.context.view_layer.update() 
         
         pos = pathFollower.matrix_world.to_translation()
         return Vector([pos.x, pos.y, pos.z, 1])
@@ -162,7 +181,7 @@ class ExecutePainting(Operator):
         self.lightPaths = []            # Path objects
         self.lightPathDirections = []   # 0 or 1 direction of path traversal
         
-        lightPathsUnsorted = list(bpy.data.groups.get('LightPathGroup').objects)
+        lightPathsUnsorted = list(bpy.data.collections['Light Paths'].all_objects)
         orderedLightPaths = []
         orderedLightPathDirections = []
         
@@ -176,8 +195,11 @@ class ExecutePainting(Operator):
             
             if color is None:
                 print("PATH ", path, " HAS NO EMISSION NODE TO DETERMINE COLOR")
-                
-            if (not self.pointInWorkspace(start) and not self.pointInWorkspace(end)):
+              
+            if (not path.visible_get()):
+                lightPathsUnsorted.remove(path)
+                print("Filtered hidden path ", path)
+            elif (not self.pointInWorkspace(start) and not self.pointInWorkspace(end)):
                 lightPathsUnsorted.remove(path)
                 print("Filtered out of bounds path ", path)
             elif (isBlack and not followBlackPaths or color is None):
@@ -185,7 +207,7 @@ class ExecutePainting(Operator):
                 print("Filtered black path ", path)
             elif (start - end).length < 0.0001 and (start - mid).length < 0.0001:
                 lightPathsUnsorted.remove(path)
-                print("Filtered short path ", path)
+                print("Filtered short path ", path, (start - end).length, (start - mid).length )
             
             
         # Determine first light path point by max height
@@ -236,7 +258,7 @@ class ExecutePainting(Operator):
         
     def writePosition(self, pos):
         x, y, z = int(pos.x * self.machineStepsPerUnit.x), int(pos.y * self.machineStepsPerUnit.y), int(pos.z * self.machineStepsPerUnit.z)
-        my_sender.simple_send_to("/blender/x", ['mov', x, y, z], (ip_out, port_out))
+        self.sendOSC(b'/blender/x', [b'mov', x, y, z])
     
     def writeMovement(self, pos, doWriteNextPath):
         global currentMachinePos, currentWorldPos, currentColor, isFirstMove
@@ -254,9 +276,8 @@ class ExecutePainting(Operator):
         else:
             propInTheWay = False
             
-            # iterate through scene props group and raycast for collisions
-            props = list(bpy.data.groups.get('SceneProps').objects)
-            for index, prop in enumerate(props):
+            # iterate through scene props group and raycast for collisions 
+            for prop in bpy.data.collections['Scene Props'].all_objects:
                 origin = prop.matrix_world.inverted() * currentWorldPos
                 dest = prop.matrix_world.inverted() * worldPos
                 direction = (dest - origin).normalized()
@@ -272,7 +293,6 @@ class ExecutePainting(Operator):
             
             # If first move or there is prop in the way and moving to a new path then avoid obstacle
             if (self.movingToNextPath and propInTheWay or isFirstMove):
-                print("Something is in the way! Avoiding obstacle.")
                 zHeight = max(min(self.propHeightLimit, self.machineBounds.z), 0)
                 #if (self.machineAxisInversions[2]):
                 #    zHeight = self.machineBounds.z
@@ -284,7 +304,7 @@ class ExecutePainting(Operator):
                 isFirstMove = False
                 
             if doWriteNextPath:
-                # NextPath signals are checkpoints at tge start of each path that
+                # NextPath signals are checkpoints at the start of each path that
                 # arduino uses to know when to break up light paths across the multiple exposures
                 self.writeNextPath()
                 self.writeColor(currentColor[0], currentColor[1], currentColor[2])
@@ -307,51 +327,56 @@ class ExecutePainting(Operator):
         b = int(b)
         currentColor = [r, g, b]
         if (not self.overrideColor):
-            my_sender.simple_send_to("/blender/x", ['col', r, g, b], (ip_out, port_out))
+            self.sendOSC(b'/blender/x', [b'col', r, g, b])
         
     def setColorOverride(self, override):
         global currentColor
         self.overrideColor = override
         if (override):
-            my_sender.simple_send_to("/blender/x", ['col', 0, 0, 0], (ip_out, port_out))
+            self.sendOSC(b'/blender/x', [b'col', 0, 0, 0])
         else:
             self.writeColor(currentColor[0], currentColor[1] , currentColor[2])
       
     def writeSpeed(self):
         # steps per second
         sx, sy, sz = int(self.machineSpeed * self.machineStepsPerUnit.x), int(self.machineSpeed * self.machineStepsPerUnit.y), int(self.machineSpeed * self.machineStepsPerUnit.z)
-        my_sender.simple_send_to("/blender/x", ['spd', sx, sy, sz], (ip_out, port_out))
+        self.sendOSC(b'/blender/x', [b'spd', sx, sy, sz])
+        
+    def writeSpeedDark(self):
+        # steps per second
+        sx, sy, sz = int(self.machineSpeedDark * self.machineStepsPerUnit.x), int(self.machineSpeedDark * self.machineStepsPerUnit.y), int(self.machineSpeedDark * self.machineStepsPerUnit.z)
+        self.sendOSC(b'/blender/x', [b'spd', sx, sy, sz])
         
     def writeWorkspaceSize(self):
         # steps
         wx, wy, wz = int(self.machineBounds.x * self.machineStepsPerUnit.x), int(self.machineBounds.y * self.machineStepsPerUnit.y), int(self.machineBounds.z * self.machineStepsPerUnit.z)
-        my_sender.simple_send_to("/blender/x", ['siz', wx, wy, wz], (ip_out, port_out))
+        self.sendOSC(b'/blender/x', [b'siz', wx, wy, wz])
           
     def writeAxisInversion(self):
         a = self.machineAxisInversions
-        my_sender.simple_send_to("/blender/x", ['inv', -1 if a[0] else 1, -1 if a[1] else 1, -1 if a[2] else 1], (ip_out, port_out))
+        self.sendOSC(b'/blender/x', [b'inv', -1 if a[0] else 1, -1 if a[1] else 1, -1 if a[2] else 1])
         
     def writeLedCalibration(self):
         calR, calG, calB = int(self.ledCalibration[0] * 1000), int(self.ledCalibration[1] * 1000), int(self.ledCalibration[2] * 1000)
-        my_sender.simple_send_to("/blender/x", ['cal', calR, calG, calB], (ip_out, port_out))
+        self.sendOSC(b'/blender/x', [b'cal', calR, calG, calB])
       
     def writeFrameNumber(self, context):
-        my_sender.simple_send_to("/blender/x", ['frm', context.scene.frame_current], (ip_out, port_out))
+        self.sendOSC(b'/blender/x', [b'frm', context.scene.frame_current])
         
     def writeNextPath(self):
-        my_sender.simple_send_to("/blender/x", ['nxt', 0, 0, 0], (ip_out, port_out))
+        self.sendOSC(b'/blender/x', [b'nxt', 0, 0, 0])
         
     def writeExposureCount(self):
-        my_sender.simple_send_to("/blender/x", ['exc', self.exposureCount, 0, 0], (ip_out, port_out))
+        self.sendOSC(b'/blender/x', [b'exc', self.exposureCount, 0, 0])
         
     def writeExposureTime(self):
-        my_sender.simple_send_to("/blender/x", ['ext', self.exposureTime, 0, 0], (ip_out, port_out))
+        self.sendOSC(b'/blender/x', [b'ext', self.exposureTime, 0, 0])
         
     def writeYieldThreshold(self):
-        my_sender.simple_send_to("/blender/x", ['yel', math.floor(self.exposureYieldThreshold) * 1000, 0, 0], (ip_out, port_out))
+        self.sendOSC(b'/blender/x', [b'yel', math.floor(self.exposureYieldThreshold) * 1000, 0, 0])
          
     def writeFinish(self):
-        my_sender.simple_send_to("/blender/x", ['fin'], (ip_out, port_out))
+        self.sendOSC(b'/blender/x', [b'fin'])
         
     
     # Send path info commands to machine
@@ -363,18 +388,16 @@ class ExecutePainting(Operator):
         self.writeFrameNumber(context)
         self.writeWorkspaceSize()
         self.writeAxisInversion()
-        self.writeSpeed()
+        self.writeSpeedDark()
         self.writeLedCalibration()
         self.writeExposureCount()
         self.writeExposureTime()
         self.writeYieldThreshold()
         
-        # enable all layers so that geometry loads for collision avoidance raycasting
-        enabledLayers = []
-        for i in range(len(bpy.context.scene.layers)):
-            if bpy.context.scene.layers[i] == False:
-                enabledLayers.append(i)
-                bpy.context.scene.layers[i] = True 
+        # enable scene props so that geometry loads for collision avoidance raycasting
+        # Unsure if this still works as intended in 3.0+
+        for prop in bpy.data.collections['Scene Props'].all_objects:
+            prop.hide_viewport = False
             
         # Collect ordered list of light paths
         self.collectPaths(context)
@@ -393,14 +416,16 @@ class ExecutePainting(Operator):
             
             followPathConstraint.target = path
             followPathConstraint.offset_factor = max(min(direction, pathEnd), pathStart)
-            context.scene.update()
+            bpy.context.view_layer.update() 
             pos = pathFollower.matrix_world.to_translation()
             lastPos = pos#.copy()
             
             self.writeColor(0,0,0)
             self.movingToNextPath = True
+            self.writeSpeedDark()
             self.writeMovement(pos, False)
             self.movingToNextPath = False
+            self.writeSpeed()
             
             color, isBlack = self.getPathColor(path)
             recordNextPathMarker = not isBlack
@@ -419,7 +444,7 @@ class ExecutePainting(Operator):
                 offset = max(min(offset, pathEnd), pathStart)
                 
                 followPathConstraint.offset_factor = offset
-                context.scene.update()
+                bpy.context.view_layer.update() 
                 pos = pathFollower.matrix_world.to_translation()
 
             self.writeMovement(pos, recordNextPathMarker)
@@ -434,25 +459,25 @@ class ExecutePainting(Operator):
         
         if context.scene.frame_current < context.scene.frame_end:
             bpy.ops.screen.frame_offset(delta = 1)
-        
-        # disable enabled layers
-        for _, i in enumerate(enabledLayers):
-            bpy.context.scene.layers[i] = False
-    
+            
+            
+    # Set up socket for OSC receive server
+    finishReceived = False
     
     # Clean up objects and variables on finish/cancel
     def cleanup(self):
         global executingPainting, pathFollower
+        #osc_receiver.stop_all()
         executingPainting = False
         if not (pathFollower is None):
-            bpy.context.scene.objects.active = pathFollower
+            bpy.context.view_layer.objects.active = pathFollower
             bpy.ops.object.delete()
             pathFollower = None
     
     
     # Modal is called during execution
     def modal(self, context, event):
-        global cancelClicked, executingPainting
+        global cancelClicked, executingPainting, finishReceived
         
         if cancelClicked:
             self.cleanup()
@@ -460,10 +485,12 @@ class ExecutePainting(Operator):
         
         if event.type == 'TIMER':
             # Check for incoming signal from OSC that path has been drawn
-            data = my_receiver.get_data()
-            if data:
-                print("OSC data received: ", data)
-            if not (data is None) and data[0] == "finished" and data[2] == context.scene.frame_current - 1:
+            #data = my_receiver.fget_data()
+            #if not (data is None):
+            #    print("OSC data received: ", data)
+            #if not (data is None) and data[0] == "finished" and data[2] == context.scene.frame_current - 1:
+            if finishReceived:
+                finishReceived = False
                 isLastFrame = context.scene.frame_current >= context.scene.frame_end
                 self.sendFrameMovement(context)
                 if isLastFrame:
@@ -483,6 +510,7 @@ class ExecutePainting(Operator):
         self.machineOffset = Vector(props.painting_robot_position)
         self.machineStepsPerUnit = Vector(props.painting_robot_steps_per_unit)
         self.machineSpeed = props.light_paint_max_speed
+        self.machineSpeedDark = props.light_paint_dark_speed
         self.machineBounds = Vector(props.painting_robot_bounds)
         self.machineAxisInversions = props.painting_robot_axis_inversions
         self.propHeightLimit = props.prop_height_limit
@@ -494,17 +522,17 @@ class ExecutePainting(Operator):
         
         bpy.ops.screen.animation_cancel(restore_frame = False)
         bpy.ops.screen.frame_jump(end = False)
-        bpy.context.scene.update()
+        bpy.context.view_layer.update() 
         
         bpy.ops.object.empty_add(location = (0,0,0))
         bpy.ops.object.constraint_add(type='FOLLOW_PATH')
-        pathFollower = bpy.context.scene.objects.active
+        pathFollower = bpy.context.view_layer.objects.active
         pathFollower.name = "Path Follower"
         followPathConstraint = pathFollower.constraints["Follow Path"]
         followPathConstraint.use_fixed_location = True
         
         wm = context.window_manager
-        self._timer = wm.event_timer_add(1.0, context.window)
+        self._timer = wm.event_timer_add(time_step = 1.0, window = context.window)
         wm.modal_handler_add(self)
         
         self.sendFrameMovement(context)
@@ -534,7 +562,7 @@ class CancelExecution(Operator):
 class View3dPanel(Panel):
     bl_idname = "OBJECT_PT_light_paint_export"
     bl_space_type = 'VIEW_3D'
-    bl_region_type = 'TOOLS'
+    bl_region_type = 'UI'
     bl_label = 'Light Painting Execution'
     bl_context = 'objectmode'
     bl_category = 'Light Painting'
@@ -549,10 +577,11 @@ class View3dPanel(Panel):
 
         machineVolumeEmpty = bpy.data.objects.get("MachineVolume")
         if machineVolumeEmpty is None:
-            oldActive = bpy.context.scene.objects.active
-            bpy.ops.object.empty_add(type='CUBE', view_align=False, layers=(True, True, True, True, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False))
-            machineVolumeEmpty = bpy.context.scene.objects.active
-            bpy.context.scene.objects.active = oldActive
+            oldActive = bpy.context.active_object
+            bpy.ops.object.empty_add(type='CUBE', align='WORLD')
+            machineVolumeEmpty = bpy.context.active_object
+            bpy.context.scene.collection.objects.link(machineVolumeEmpty)
+            bpy.context.view_layer.objects.active = oldActive
             machineVolumeEmpty.name = "MachineVolume"
             
         machineVolumeEmpty.scale = machineBounds / 2
@@ -560,10 +589,11 @@ class View3dPanel(Panel):
         
         machineOriginEmpty = bpy.data.objects.get("MachineOrigin")
         if machineOriginEmpty is None:
-            oldActive = bpy.context.scene.objects.active
-            bpy.ops.object.empty_add(type='ARROWS', view_align=False, layers=(True, True, True, True, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False))
-            machineOriginEmpty = bpy.context.scene.objects.active
-            bpy.context.scene.objects.active = oldActive
+            oldActive = bpy.context.active_object
+            bpy.ops.object.empty_add(type='ARROWS', align='WORLD')
+            machineOriginEmpty = bpy.context.active_object
+            bpy.context.scene.collection.objects.link(machineOriginEmpty)
+            bpy.context.view_layer.objects.active = oldActive
             machineOriginEmpty.name = "MachineOrigin"
             
         machineOriginEmpty.scale = machineBounds / 6
@@ -586,6 +616,8 @@ class View3dPanel(Panel):
     
     bpy.types.Scene.light_paint_max_speed = bpy.props.FloatProperty(name="Light Painting Speed", description = "Travel speed for light painting robot.", default = 10.0, min = 0.1, max = 1000.0, soft_min = 0.1, soft_max = 1000.0, step = 0.1, precision = 1, unit = 'VELOCITY')
     
+    bpy.types.Scene.light_paint_dark_speed = bpy.props.FloatProperty(name="Dark Speed", description = "Travel speed for light painting robot when LED is dark.", default = 20.0, min = 0.1, max = 1000.0, soft_min = 0.1, soft_max = 1000.0, step = 0.1, precision = 1, unit = 'VELOCITY')
+    
     bpy.types.Scene.prop_height_limit = bpy.props.FloatProperty(name="Prop Height Limit", description = "Height to retract Z axis to during obstacle avoidance.", default = 20.0, soft_min = 0, soft_max = 1000.0, step = 0.1, precision = 1, unit = 'LENGTH')
     
     bpy.types.Scene.led_calibration = bpy.props.FloatVectorProperty(name="LED Calibration", description = "RGB scaling values to correct LED colors", default = (0.4, 1.0, 1.0), min = 0.0, max = 1.0, step = 0.001, precision = 3, unit = 'NONE')
@@ -607,9 +639,10 @@ class View3dPanel(Panel):
         scene = context.scene
         props = scene
         
-        # Set of SceneProps group for obstacle avoidance
-        if not ('SceneProps' in bpy.data.groups):
-                bpy.data.groups.new(name = 'SceneProps')
+        # Set of SceneProps collectios for obstacle avoidance
+        if "Scene Props" not in bpy.data.collections:
+            sceneProps = bpy.data.collections.new("Scene Props")
+            bpy.context.scene.collection.children.link(sceneProps)
             
         # Path paremeters
         layout.label(text="Path Interpretation", icon = 'OUTLINER_OB_CURVE')
@@ -622,7 +655,7 @@ class View3dPanel(Panel):
 
         # Hardware parameters
         layout.separator()
-        layout.label(text="Hardware Parameters", icon = 'SCRIPTWIN')
+        layout.label(text="Hardware Parameters", icon = 'SETTINGS')
         split = layout.split()
         col = split.column()
         col.prop(props, "painting_robot_position")
@@ -631,6 +664,8 @@ class View3dPanel(Panel):
         
         row = layout.row()
         row.prop(props, "light_paint_max_speed")
+        row = layout.row()
+        row.prop(props, "light_paint_dark_speed")
         row = layout.row()
         row.prop(props, "painting_robot_steps_per_unit")
         row = layout.row()
