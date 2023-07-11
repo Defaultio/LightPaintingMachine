@@ -11,15 +11,15 @@
 double ledBrightnessTrim[3] =  {0.4, 1.0, 1.0}; // Brightness tuning for LED
 int homeFrameFrequency = 20; // Rehome all axes after this many frames
 int homeStepsPerSecond = 4000;
-int bashLightFadeOutTime = 4500; // wait this long after initially triggering dragonframe to start the first exposure
+int bashLightFadeOutTime = 3000; // wait this long after initially triggering dragonframe to start the first exposure
 int timeBetweenFrameExposures = 800; // wait this long after triggering dragonframe for the next exposure before continuing painting
-int mocoWaitTime = 500; // wait this amount of time to allow moco to move if this time is not already soaked up by bash light fade and communication
+int mocoWaitTime = 000;  // 500// wait this amount of time to allow moco to move if this time is not already soaked up by bash light fade and communication
 
 
 
 // Command and parsing values
 File commandSequenceLog;
-boolean receivingData; 
+boolean receivingData;
 int parsePosition;
 String stringVal;
 String command;
@@ -74,7 +74,7 @@ void setup() {
     Serial.println("SD Initialization failed");
     return;
   }
-  
+
 
   for (int i = 0; i < 3; i ++)
   {
@@ -85,13 +85,13 @@ void setup() {
 
   pinMode(dragonframeActivate, OUTPUT);
   pinMode(dragonframeFinished, INPUT_PULLUP);
-  
+
   digitalWrite(dragonframeActivate, HIGH);
 
   stepperX.setMaxSpeed(stepsPerSecond[0]);
   stepperY.setMaxSpeed(stepsPerSecond[1]);
   stepperZ.setMaxSpeed(stepsPerSecond[2]);
-  
+
   steppers.addStepper(stepperX);
   steppers.addStepper(stepperY);
   steppers.addStepper(stepperZ);
@@ -114,7 +114,7 @@ void loop() {
     }
     homeSteppers();
   }
-  
+
   executePainting();
 
   Serial.println("fin");
@@ -135,85 +135,85 @@ void receiveData() {
   {
     receivingData = true;
     Serial.println("Waiting to receive data");
-    
+
     while (receivingData)
     {
-       if (Serial.available()) 
-       {
-          memset(serialReceiveCommand, 0, sizeof(serialReceiveCommand));
-          memset(serialReceiveValues, 0, sizeof(serialReceiveValues));
-          
-          Serial.readBytesUntil(',', serialReceiveCommand, 4);
-          Serial.readBytesUntil('\n', serialReceiveValues, 25);
+      if (Serial.available())
+      {
+        memset(serialReceiveCommand, 0, sizeof(serialReceiveCommand));
+        memset(serialReceiveValues, 0, sizeof(serialReceiveValues));
 
-          /* Including these prints causes bugs.
+        Serial.readBytesUntil(',', serialReceiveCommand, 4);
+        Serial.readBytesUntil('\n', serialReceiveValues, 25);
+
+        /* Including these prints causes bugs.
           Serial.print("Recorded command: ");
           Serial.print(serialReceiveCommand);
           Serial.print(" ");
           Serial.println(serialReceiveValues);
-          */
-          
-          command = String(serialReceiveCommand);
-          stringVal = String(serialReceiveValues);
-          
-          int c0 = stringVal.indexOf(',');
-          int c1 = stringVal.indexOf(',', c0 + 1);
+        */
 
-          commandValue[0] = stringVal.substring(0, c0).toInt();
-          commandValue[1] = stringVal.substring(c0 + 1, c1).toInt();
-          commandValue[2] = stringVal.substring(c1 + 1).toInt();
+        command = String(serialReceiveCommand);
+        stringVal = String(serialReceiveValues);
+
+        int c0 = stringVal.indexOf(',');
+        int c1 = stringVal.indexOf(',', c0 + 1);
+
+        commandValue[0] = stringVal.substring(0, c0).toInt();
+        commandValue[1] = stringVal.substring(c0 + 1, c1).toInt();
+        commandValue[2] = stringVal.substring(c1 + 1).toInt();
 
 
-          // some commands need to be interpretted before reading frame:
-          
-          
-          if (command == "mov")
-          {
-            commandValue[0] *= axisDirections[0];
-            commandValue[1] *= axisDirections[1];
-            commandValue[2] *= axisDirections[2];
-          }
-          else if (command == "siz")
-          {
-            setWorkspaceSize(commandValue[0], commandValue[1], commandValue[2]);
-          }
-          else if (command == "spd")
-          {
-            setMoveSpeed(commandValue[0], commandValue[1], commandValue[2]);
-          }
-          else if (command == "inv")
-          {
-            setAxisDirections(commandValue[0], commandValue[1], commandValue[2]);
-          }
-          else if (command == "cal")
-          {
-            setLedCalibration(commandValue[0] / 1000.0, commandValue[1] / 1000.0, commandValue[2] / 1000.0);
-          }
-          else if (command == "frm")
-          {
-             setFrame(commandValue[0]);
-          }
-          else if (command == "yel")
-          {
-             setYieldForNextTime(commandValue[0]);
-          }
-          else if (command == "fin")
-          {
-            Serial.println("Finished receiving data");
-            receivingData = false;
-          }
+        // some commands need to be interpretted before reading frame:
 
-          commandSequenceLog.print(serialReceiveCommand);
-          commandSequenceLog.print(",");
-          commandSequenceLog.print(commandValue[0]);
-          commandSequenceLog.print(",");
-          commandSequenceLog.print(commandValue[1]);
-          commandSequenceLog.print(",");
-          commandSequenceLog.println(commandValue[2]);
-       }
+
+        if (command == "mov")
+        {
+          commandValue[0] *= axisDirections[0];
+          commandValue[1] *= axisDirections[1];
+          commandValue[2] *= axisDirections[2];
+        }
+        else if (command == "siz")
+        {
+          setWorkspaceSize(commandValue[0], commandValue[1], commandValue[2]);
+        }
+        else if (command == "spd")
+        {
+          setMoveSpeed(commandValue[0], commandValue[1], commandValue[2]);
+        }
+        else if (command == "inv")
+        {
+          setAxisDirections(commandValue[0], commandValue[1], commandValue[2]);
+        }
+        else if (command == "cal")
+        {
+          setLedCalibration(commandValue[0] / 1000.0, commandValue[1] / 1000.0, commandValue[2] / 1000.0);
+        }
+        else if (command == "frm")
+        {
+          setFrame(commandValue[0]);
+        }
+        else if (command == "yel")
+        {
+          setYieldForNextTime(commandValue[0]);
+        }
+        else if (command == "fin")
+        {
+          Serial.println("Finished receiving data");
+          receivingData = false;
+        }
+
+        commandSequenceLog.print(serialReceiveCommand);
+        commandSequenceLog.print(",");
+        commandSequenceLog.print(commandValue[0]);
+        commandSequenceLog.print(",");
+        commandSequenceLog.print(commandValue[1]);
+        commandSequenceLog.print(",");
+        commandSequenceLog.println(commandValue[2]);
+      }
     }
     commandSequenceLog.close();
-    
+
     Serial.println("Data received");
     delay(500);
   }
@@ -242,10 +242,13 @@ void waitForDragonframeEnd()
 
 void waitForMoco()
 {
-  Serial.println("Waiting for moco move.");
-  int elapsed = millis() - executeStartTime;
+  long elapsed = millis() - executeStartTime;
   if (elapsed < mocoWaitTime)
+  {
+    Serial.print("Waiting for moco move: ");
+    Serial.print(mocoWaitTime - elapsed);
     delay(mocoWaitTime - elapsed);
+  }
 }
 
 void executePainting()
@@ -257,31 +260,32 @@ void executePainting()
   lightStarted = false;
   currentFrameExposure = -1;
   firstMoveDone = false;
-  
+
   commandSequenceLog = SD.open("commands.txt");
   if (commandSequenceLog)
   {
-    
+    Serial.println("Reading command sequence log.");
+
     while (readNextCommand())
     {
-      
-      /*
-      Serial.print("Next command: ");
-      Serial.print(command);
-      Serial.print(": ");
-      Serial.print(commandValue[0]);
-      Serial.print(",");
-      Serial.print(commandValue[1]);
-      Serial.print(",");
-      Serial.println(commandValue[2]);
-      //*/
 
-      if (!lightStarted && (command.equals("col") && (commandValue[0] > 0 || commandValue[1] > 0 || commandValue[2] > 0) 
+      /*
+        Serial.print("Next command: ");
+        Serial.print(command);
+        Serial.print(": ");
+        Serial.print(commandValue[0]);
+        Serial.print(",");
+        Serial.print(commandValue[1]);
+        Serial.print(",");
+        Serial.println(commandValue[2]);
+        //*/
+
+      if (!lightStarted && (command.equals("col") && (commandValue[0] > 0 || commandValue[1] > 0 || commandValue[2] > 0)
                             || command.equals("mov") && (color[0] > 0 || color[1] > 0 || color[3] > 0)))
       {
         lightStarted = true;
         int startupTime = 0;
-        
+
         if (currentFrameExposure == 0)
         {
           startupTime = bashLightFadeOutTime;
@@ -290,48 +294,48 @@ void executePainting()
         {
           startupTime = timeBetweenFrameExposures;
         }
-        
+
         int elapsed = millis() - exposureStartTime;
         if (elapsed < startupTime)
         {
           delay(startupTime - elapsed); // Shutter isn't open yet because bash light is fading out; yield until shutter opens.
         }
       }
-      
-       if (command.equals("mov"))
-       {
-          if (!firstMoveDone && framesSinceHome == 0) // just homed, need to do object avoidance
-          {
-            setPosition(pos[0], pos[1], -workspaceSize[2]);
-            setPosition(commandValue[0], commandValue[1], pos[2]);
-            firstMoveDone = true;
-          }
-          setPosition(commandValue[0], commandValue[1], commandValue[2]);
-       }
-       else if (command.equals("col"))
-       {
-          setColor(commandValue[0], commandValue[1], commandValue[2]);
-       }
-       else if (command.equals("nxt"))
-       {
-          nextPathReached();
-       }
-       else if (command.equals("spd"))
-       {
-          setMoveSpeed(commandValue[0], commandValue[1], commandValue[2]);
-       }
-       else if (command.equals("exc"))
-       {
-          setExposureCount(commandValue[0]);
-       }
-       else if (command.equals("ext"))
-       {
-          setExposureTime(commandValue[0]);
-       }
-       else if (command.equals("fin"))
-       {
-          Serial.println("Fin command reached.");
-       }
+
+      if (command.equals("mov"))
+      {
+        if (!firstMoveDone && framesSinceHome == 0) // just homed, need to do object avoidance
+        {
+          setPosition(pos[0], pos[1], -workspaceSize[2]);
+          setPosition(commandValue[0], commandValue[1], pos[2]);
+          firstMoveDone = true;
+        }
+        setPosition(commandValue[0], commandValue[1], commandValue[2]);
+      }
+      else if (command.equals("col"))
+      {
+        setColor(commandValue[0], commandValue[1], commandValue[2]);
+      }
+      else if (command.equals("nxt"))
+      {
+        nextPathReached();
+      }
+      else if (command.equals("spd"))
+      {
+        setMoveSpeed(commandValue[0], commandValue[1], commandValue[2]);
+      }
+      else if (command.equals("exc"))
+      {
+        setExposureCount(commandValue[0]);
+      }
+      else if (command.equals("ext"))
+      {
+        setExposureTime(commandValue[0]);
+      }
+      else if (command.equals("fin"))
+      {
+        Serial.println("Fin command reached.");
+      }
     }
     commandSequenceLog.close();
   }
@@ -344,7 +348,7 @@ void executePainting()
   framesSinceHome++;
 
   Serial.println("Execution complete.");
-  
+
   if (millis() - exposureStartTime < 1000) // if we reach the end of the painitng nearly immediately after starting the frame
   {
     Serial.println("Short execution stalling...");
@@ -461,7 +465,7 @@ void nextPathReached()
     waitForDragonframeEnd();
     delay(800);
     fireDragonframe();
-    
+
     exposureStartTime = millis();
     lightStarted = false;
     currentFrameExposure++;
@@ -470,7 +474,7 @@ void nextPathReached()
     {
       waitForMoco();
     }
-    
+
     Serial.print("Executing ");
     Serial.print(currentFrame);
     Serial.print(".");
@@ -492,24 +496,24 @@ void soakRemainingExposures()
   }
 }
 
-boolean readNextCommand(){
+boolean readNextCommand() {
   command = "";
   stringVal = "";
   parsePosition = 0;
   commandValue[0] = 0;
   commandValue[1] = 0;
   commandValue[2] = 0;
-  
-  while (commandSequenceLog.available()) 
+
+  while (commandSequenceLog.available())
   {
     /*
-    Serial.print("Parsing: '");
-    Serial.print(command);
-    Serial.print(":");
-    Serial.print(parsePosition);
-    Serial.print(":");
-    Serial.println(stringVal);//*/
-    
+      Serial.print("Parsing: '");
+      Serial.print(command);
+      Serial.print(":");
+      Serial.print(parsePosition);
+      Serial.print(":");
+      Serial.println(stringVal);//*/
+
     byte in = commandSequenceLog.read();
     if (in == 44) // comma
     {
@@ -519,7 +523,7 @@ boolean readNextCommand(){
         {
           return false;
         }
-          
+
         commandValue[parsePosition - 1] = val;
         stringVal = "";
       }
@@ -560,7 +564,7 @@ boolean readNextCommand(){
       }
     }
   }
-  
+
   return false;
 }
 
@@ -573,7 +577,7 @@ boolean stringValToInt()
     Serial.print("Error reading file: toInt failed for string: '");
     Serial.print(stringVal);
     Serial.println('\'');
-    
+
     while (true)
       delay(100);
 
@@ -638,7 +642,7 @@ void bringStepperToLimit(int i)
 {
   int homed = 0;
   long desiredPos[3] = {pos[0], pos[1], pos[2]};
-  
+
   while (homed < 2)
   {
     lowerLimitState[i] = digitalRead(lowerLimits[i]);
@@ -658,7 +662,7 @@ void bringStepperToLimit(int i)
         homed = 2;
       else
         desiredPos[i] += -homeSpeed / 4;
-        delay(15);
+      delay(15);
     }
     setPosition(desiredPos[0], desiredPos[1], desiredPos[2]);
     delayMicroseconds(5);
